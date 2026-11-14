@@ -13,6 +13,9 @@ import com.plenuen.filmcam.data.LutPreset
 
 /**
  * Painted film strip artwork: a 35mm canister for film stocks, a brand badge for Leica / Ricoh GR.
+ *
+ * Canisters carry the film code vertically (E100, G200, P400, 400H ...) with the brand line small
+ * underneath, matching the Ricoh GR custom firmware screen this app follows.
  */
 
 fun DrawScope.drawPresetArt(preset: LutPreset) {
@@ -23,16 +26,17 @@ private fun DrawScope.drawCanisterArt(preset: LutPreset) {
     val w = size.width
     val h = size.height
     val bodyWidth = w * 0.46f
-    val bodyHeight = h * 0.64f
+    val bodyHeight = h * 0.66f
     val left = (w - bodyWidth) / 2f
-    val top = (h - bodyHeight) / 2f + h * 0.02f
-    val radius = CornerRadius(w * 0.06f, w * 0.06f)
+    val top = (h - bodyHeight) / 2f + h * 0.01f
+    val right = left + bodyWidth
+    val centerX = left + bodyWidth * 0.5f
 
     // spool sticking out of the top cap
     drawRoundRect(
         color = Color(0xFF1E1E24),
-        topLeft = Offset(left + bodyWidth * 0.33f, top - h * 0.055f),
-        size = Size(bodyWidth * 0.34f, h * 0.07f),
+        topLeft = Offset(left + bodyWidth * 0.33f, top - h * 0.05f),
+        size = Size(bodyWidth * 0.34f, h * 0.065f),
         cornerRadius = CornerRadius(w * 0.02f, w * 0.02f),
     )
 
@@ -40,60 +44,56 @@ private fun DrawScope.drawCanisterArt(preset: LutPreset) {
     drawRoundRect(
         brush = Brush.horizontalGradient(
             0f to Color(preset.bodyColor2),
-            0.22f to Color(preset.bodyColor),
-            0.62f to Color(preset.bodyColor),
+            0.24f to Color(preset.bodyColor),
+            0.60f to Color(preset.bodyColor),
             1f to Color(preset.bodyColor2),
             startX = left,
-            endX = left + bodyWidth,
+            endX = right,
         ),
         topLeft = Offset(left, top),
         size = Size(bodyWidth, bodyHeight),
-        cornerRadius = radius,
+        cornerRadius = CornerRadius(w * 0.05f, w * 0.05f),
     )
 
-    // metal caps
-    val capColor = Color(0xFF33333A)
-    drawRect(capColor, Offset(left, top), Size(bodyWidth, bodyHeight * 0.085f))
-    drawRect(capColor, Offset(left, top + bodyHeight * 0.915f), Size(bodyWidth, bodyHeight * 0.085f))
-
-    // colour band just under the cap
+    // metal caps + colour band under the top cap
+    val capColor = Color(0xFF35353C)
+    drawRect(capColor, Offset(left, top), Size(bodyWidth, bodyHeight * 0.08f))
+    drawRect(capColor, Offset(left, top + bodyHeight * 0.92f), Size(bodyWidth, bodyHeight * 0.08f))
     drawRect(
         color = Color(preset.bandColor),
-        topLeft = Offset(left, top + bodyHeight * 0.085f),
-        size = Size(bodyWidth, bodyHeight * 0.075f),
+        topLeft = Offset(left, top + bodyHeight * 0.08f),
+        size = Size(bodyWidth, bodyHeight * 0.065f),
     )
 
-    // film code, printed vertically down the canister
-    val labelCenterX = left + bodyWidth * 0.5f
-    val labelCenterY = top + bodyHeight * 0.55f
-    val maxLabelHeight = bodyHeight * 0.74f
-    var sizePx = h * 0.155f
-    while (sizePx > h * 0.055f && measureText(preset.label, sizePx, Color(preset.inkColor)) > maxLabelHeight) {
-        sizePx *= 0.92f
-    }
     val canvas = drawContext.canvas.nativeCanvas
-    val labelPaint = textPaint(Color(preset.inkColor), sizePx)
+
+    // film code, printed vertically down the canister
+    val codeTop = top + bodyHeight * 0.17f
+    val codeBottom = top + bodyHeight * 0.84f
+    val codeCenterY = (codeTop + codeBottom) * 0.5f
+    var sizePx = h * 0.17f
+    while (sizePx > h * 0.055f && measureText(preset.label, sizePx) > (codeBottom - codeTop)) {
+        sizePx *= 0.93f
+    }
+    val codePaint = textPaint(Color(preset.inkColor), sizePx)
     canvas.save()
-    canvas.rotate(-90f, labelCenterX, labelCenterY)
-    canvas.drawText(preset.label, labelCenterX, labelCenterY + sizePx * 0.34f, labelPaint)
+    canvas.rotate(-90f, centerX, codeCenterY)
+    canvas.drawText(preset.label, centerX, codeCenterY + sizePx * 0.34f, codePaint)
     canvas.restore()
 
-    // tiny brand line near the top of the canister
-    val brandPaint = textPaint(Color(preset.inkColor).copy(alpha = 0.75f), h * 0.052f)
-    val brandY = top + bodyHeight * 0.22f
-    canvas.save()
-    canvas.rotate(-90f, labelCenterX, brandY)
-    canvas.drawText(preset.brand.uppercase(), labelCenterX, brandY, brandPaint)
-    canvas.restore()
+    // small brand line above the bottom cap
+    val brandPaint = textPaint(Color(preset.inkColor).copy(alpha = 0.78f), h * 0.048f)
+    canvas.drawText(preset.brand.uppercase(), centerX, top + bodyHeight * 0.895f, brandPaint)
 }
 
 private fun DrawScope.drawBadgeArt(preset: LutPreset) {
     val w = size.width
     val h = size.height
-    val plateWidth = w * 0.62f
-    val plateHeight = h * 0.62f
+    val plateWidth = w * 0.64f
+    val plateHeight = h * 0.64f
     val left = (w - plateWidth) / 2f
     val top = (h - plateHeight) / 2f
+    val centerX = left + plateWidth * 0.5f
     val radius = CornerRadius(w * 0.07f, w * 0.07f)
 
     drawRoundRect(
@@ -112,40 +112,29 @@ private fun DrawScope.drawBadgeArt(preset: LutPreset) {
 
     val canvas = drawContext.canvas.nativeCanvas
     if (preset.brand == "Leica") {
-        val dotCenter = Offset(left + plateWidth * 0.5f, top + plateHeight * 0.28f)
-        drawCircle(Color(preset.bandColor), radius = plateWidth * 0.17f, center = dotCenter)
+        val dotCenter = Offset(centerX, top + plateHeight * 0.24f)
+        drawCircle(Color(preset.bandColor), radius = plateWidth * 0.125f, center = dotCenter)
         drawCircle(
-            color = Color.White.copy(alpha = 0.85f),
-            radius = plateWidth * 0.05f,
+            color = Color.White.copy(alpha = 0.9f),
+            radius = plateWidth * 0.032f,
             center = dotCenter,
         )
-        val wordPaint = textPaint(Color(preset.inkColor), plateHeight * 0.11f)
-        canvas.drawText(
-            "LEICA",
-            left + plateWidth * 0.5f,
-            top + plateHeight * 0.50f,
-            wordPaint,
-        )
+        val wordPaint = textPaint(Color(preset.inkColor), plateHeight * 0.075f)
+        canvas.drawText("LEICA", centerX, top + plateHeight * 0.43f, wordPaint)
     } else {
-        val wordPaint = textPaint(Color(preset.bandColor), plateHeight * 0.26f)
-        canvas.drawText("GR", left + plateWidth * 0.5f, top + plateHeight * 0.36f, wordPaint)
-        val smallPaint = textPaint(Color(preset.inkColor).copy(alpha = 0.8f), plateHeight * 0.085f)
-        canvas.drawText("RICOH", left + plateWidth * 0.5f, top + plateHeight * 0.45f, smallPaint)
+        val wordPaint = textPaint(Color(preset.bandColor), plateHeight * 0.20f)
+        canvas.drawText("GR", centerX, top + plateHeight * 0.28f, wordPaint)
+        val smallPaint = textPaint(Color(preset.inkColor).copy(alpha = 0.85f), plateHeight * 0.065f)
+        canvas.drawText("RICOH", centerX, top + plateHeight * 0.42f, smallPaint)
     }
 
-    // look code, printed vertically like a badge stamp
-    val maxHeight = plateHeight * 0.42f
-    var sizePx = plateHeight * 0.16f
-    while (sizePx > plateHeight * 0.055f && measureText(preset.label, sizePx, Color(preset.inkColor)) > maxHeight) {
-        sizePx *= 0.9f
+    // look code printed across the badge
+    var codeSize = plateHeight * 0.145f
+    while (codeSize > plateHeight * 0.05f && measureText(preset.label, codeSize) > plateWidth * 0.78f) {
+        codeSize *= 0.9f
     }
-    val codePaint = textPaint(Color(preset.inkColor), sizePx)
-    val cx = left + plateWidth * 0.5f
-    val cy = top + plateHeight * 0.72f
-    canvas.save()
-    canvas.rotate(-90f, cx, cy)
-    canvas.drawText(preset.label, cx, cy + sizePx * 0.34f, codePaint)
-    canvas.restore()
+    val codePaint = textPaint(Color(preset.inkColor), codeSize)
+    canvas.drawText(preset.label, centerX, top + plateHeight * 0.74f, codePaint)
 }
 
 private fun textPaint(color: Color, sizePx: Float): android.graphics.Paint =
@@ -161,7 +150,7 @@ private fun textPaint(color: Color, sizePx: Float): android.graphics.Paint =
         letterSpacing = 0.06f
     }
 
-private fun measureText(text: String, sizePx: Float, color: Color): Float {
-    val paint = textPaint(color, sizePx)
+private fun measureText(text: String, sizePx: Float): Float {
+    val paint = textPaint(Color.White, sizePx)
     return paint.measureText(text)
 }

@@ -16,7 +16,7 @@ class PreviewSurfaceGateway(private val executor: Executor) : Preview.SurfacePro
 
     private var pendingRequest: SurfaceRequest? = null
     private var texture: SurfaceTexture? = null
-    private var surface: Surface? = null
+    private val surfaces = mutableListOf<Surface>()
 
     var onBufferSize: ((Int, Int) -> Unit)? = null
 
@@ -39,8 +39,8 @@ class PreviewSurfaceGateway(private val executor: Executor) : Preview.SurfacePro
 
     fun release() {
         pendingRequest = null
-        surface?.release()
-        surface = null
+        surfaces.forEach { surface -> runCatching { surface.release() } }
+        surfaces.clear()
     }
 
     private fun attach(request: SurfaceRequest) {
@@ -49,8 +49,7 @@ class PreviewSurfaceGateway(private val executor: Executor) : Preview.SurfacePro
         val resolution = request.resolution
         surfaceTexture.setDefaultBufferSize(resolution.width, resolution.height)
         val newSurface = Surface(surfaceTexture)
-        surface?.release()
-        surface = newSurface
+        surfaces += newSurface
         request.provideSurface(newSurface, executor) { }
         onBufferSize?.invoke(resolution.width, resolution.height)
     }

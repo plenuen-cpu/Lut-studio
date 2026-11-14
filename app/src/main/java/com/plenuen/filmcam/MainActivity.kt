@@ -1,6 +1,7 @@
 package com.plenuen.filmcam
 
 import android.Manifest
+import android.app.ActivityManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -89,10 +90,15 @@ private fun FilmCamRoot(vm: FilmCamViewModel = viewModel()) {
         }
     }
 
-    if (cameraGranted) {
-        CameraScreen(vm = vm)
-    } else {
-        PermissionGate(
+    val supportsGles3 = remember(context) {
+        val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        manager.deviceConfigurationInfo.reqGlEsVersion >= 0x30000
+    }
+
+    when {
+        !supportsGles3 -> UnsupportedScreen()
+        cameraGranted -> CameraScreen(vm = vm)
+        else -> PermissionGate(
             asked = cameraAsked,
             onRequest = { cameraLauncher.launch(Manifest.permission.CAMERA) },
         )
@@ -143,5 +149,23 @@ private fun PermissionGate(asked: Boolean, onRequest: () -> Unit) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun UnsupportedScreen() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(FilmPalette.Background)
+            .padding(32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "이 기기는 OpenGL ES 3.0을 지원하지 않아\n실시간 LUT 미리보기를 쓸 수 없습니다.",
+            color = FilmPalette.TextDim,
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center,
+        )
     }
 }
