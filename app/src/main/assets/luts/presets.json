@@ -798,8 +798,9 @@
    "label": "AUTH",
    "art": "badge",
    "colors": {
-    "bg": "#171717",
-    "mark": "#E2001A",
+    "body": "#171717",
+    "body2": "#0B0B0B",
+    "band": "#E2001A",
     "ink": "#F5F5F5"
    }
   },
@@ -814,8 +815,9 @@
    "label": "VIB",
    "art": "badge",
    "colors": {
-    "bg": "#171717",
-    "mark": "#E2001A",
+    "body": "#171717",
+    "body2": "#0B0B0B",
+    "band": "#E2001A",
     "ink": "#F5F5F5"
    }
   },
@@ -830,8 +832,9 @@
    "label": "BRASS",
    "art": "badge",
    "colors": {
-    "bg": "#171717",
-    "mark": "#E2001A",
+    "body": "#171717",
+    "body2": "#0B0B0B",
+    "band": "#E2001A",
     "ink": "#F5F5F5"
    }
   },
@@ -846,8 +849,9 @@
    "label": "CONT",
    "art": "badge",
    "colors": {
-    "bg": "#171717",
-    "mark": "#E2001A",
+    "body": "#171717",
+    "body2": "#0B0B0B",
+    "band": "#E2001A",
     "ink": "#F5F5F5"
    }
   },
@@ -862,8 +866,9 @@
    "label": "MONO",
    "art": "badge",
    "colors": {
-    "bg": "#171717",
-    "mark": "#E2001A",
+    "body": "#171717",
+    "body2": "#0B0B0B",
+    "band": "#E2001A",
     "ink": "#F5F5F5"
    }
   },
@@ -878,8 +883,9 @@
    "label": "MONO+",
    "art": "badge",
    "colors": {
-    "bg": "#171717",
-    "mark": "#E2001A",
+    "body": "#171717",
+    "body2": "#0B0B0B",
+    "band": "#E2001A",
     "ink": "#F5F5F5"
    }
   },
@@ -894,8 +900,9 @@
    "label": "POSI",
    "art": "badge",
    "colors": {
-    "bg": "#121212",
-    "mark": "#E4002B",
+    "body": "#141414",
+    "body2": "#0A0A0A",
+    "band": "#E4002B",
     "ink": "#F5F5F5"
    }
   },
@@ -910,8 +917,9 @@
    "label": "NEGA",
    "art": "badge",
    "colors": {
-    "bg": "#121212",
-    "mark": "#E4002B",
+    "body": "#141414",
+    "body2": "#0A0A0A",
+    "band": "#E4002B",
     "ink": "#F5F5F5"
    }
   },
@@ -926,8 +934,9 @@
    "label": "BLEACH",
    "art": "badge",
    "colors": {
-    "bg": "#121212",
-    "mark": "#E4002B",
+    "body": "#141414",
+    "body2": "#0A0A0A",
+    "band": "#E4002B",
     "ink": "#F5F5F5"
    }
   },
@@ -942,8 +951,9 @@
    "label": "CROSS",
    "art": "badge",
    "colors": {
-    "bg": "#121212",
-    "mark": "#E4002B",
+    "body": "#141414",
+    "body2": "#0A0A0A",
+    "band": "#E4002B",
     "ink": "#F5F5F5"
    }
   },
@@ -958,8 +968,9 @@
    "label": "HICON",
    "art": "badge",
    "colors": {
-    "bg": "#121212",
-    "mark": "#E4002B",
+    "body": "#141414",
+    "body2": "#0A0A0A",
+    "band": "#E4002B",
     "ink": "#F5F5F5"
    }
   }

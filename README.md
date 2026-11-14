@@ -61,6 +61,16 @@ GitHub Actions(`.github/workflows/android.yml`)가 `main` 푸시마다
 
 로컬 빌드: Android SDK 35 + JDK 17 + Gradle 8.9, `gradle :app:assembleDebug`.
 
+## CI 활성화 (GitHub Actions)
+
+`.github/workflows/android.yml` 로 두면 `main` 푸시마다 테스트 → APK 빌드 → 릴리스가 자동으로 돕니다.
+워크플로 정의는 이 저장소의 `ci/android-workflow.yml` 에 들어 있습니다. 푸시에 쓰는 GitHub App에
+`workflows` 권한이 없어 `.github/workflows/` 경로에는 직접 쓸 수 없으므로, 다음 중 하나로 활성화하세요.
+
+1. GitHub → Settings → Applications → Pickle → Configure → Repository permissions 에서
+   **Workflows: Read and write** 로 변경한 뒤 `ci/android-workflow.yml` 을 `.github/workflows/android.yml` 로 이동
+2. 또는 GitHub 웹 편집기에서 `.github/workflows/android.yml` 을 만들고 `ci/android-workflow.yml` 내용을 붙여넣기
+
 ## 설치
 
 릴리스에서 `FilmCam-debug.apk`를 받아 설치하세요. CI가 매번 새 디버그 키로 서명하므로

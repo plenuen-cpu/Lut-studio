@@ -68,18 +68,18 @@ private fun DrawScope.drawCanisterArt(preset: LutPreset) {
     val labelCenterY = top + bodyHeight * 0.55f
     val maxLabelHeight = bodyHeight * 0.74f
     var sizePx = h * 0.155f
-    while (sizePx > h * 0.055f && measureText(preset.label, sizePx, preset.inkColor) > maxLabelHeight) {
+    while (sizePx > h * 0.055f && measureText(preset.label, sizePx, Color(preset.inkColor)) > maxLabelHeight) {
         sizePx *= 0.92f
     }
     val canvas = drawContext.canvas.nativeCanvas
-    val labelPaint = textPaint(preset.inkColor, sizePx)
+    val labelPaint = textPaint(Color(preset.inkColor), sizePx)
     canvas.save()
     canvas.rotate(-90f, labelCenterX, labelCenterY)
     canvas.drawText(preset.label, labelCenterX, labelCenterY + sizePx * 0.34f, labelPaint)
     canvas.restore()
 
     // tiny brand line near the top of the canister
-    val brandPaint = textPaint(preset.inkColor.copy(alpha = 0.75f), h * 0.052f)
+    val brandPaint = textPaint(Color(preset.inkColor).copy(alpha = 0.75f), h * 0.052f)
     val brandY = top + bodyHeight * 0.22f
     canvas.save()
     canvas.rotate(-90f, labelCenterX, brandY)
@@ -119,7 +119,7 @@ private fun DrawScope.drawBadgeArt(preset: LutPreset) {
             radius = plateWidth * 0.05f,
             center = dotCenter,
         )
-        val wordPaint = textPaint(preset.inkColor, plateHeight * 0.11f)
+        val wordPaint = textPaint(Color(preset.inkColor), plateHeight * 0.11f)
         canvas.drawText(
             "LEICA",
             left + plateWidth * 0.5f,
@@ -129,17 +129,17 @@ private fun DrawScope.drawBadgeArt(preset: LutPreset) {
     } else {
         val wordPaint = textPaint(Color(preset.bandColor), plateHeight * 0.26f)
         canvas.drawText("GR", left + plateWidth * 0.5f, top + plateHeight * 0.36f, wordPaint)
-        val smallPaint = textPaint(preset.inkColor.copy(alpha = 0.8f), plateHeight * 0.085f)
+        val smallPaint = textPaint(Color(preset.inkColor).copy(alpha = 0.8f), plateHeight * 0.085f)
         canvas.drawText("RICOH", left + plateWidth * 0.5f, top + plateHeight * 0.45f, smallPaint)
     }
 
     // look code, printed vertically like a badge stamp
     val maxHeight = plateHeight * 0.42f
     var sizePx = plateHeight * 0.16f
-    while (sizePx > plateHeight * 0.055f && measureText(preset.label, sizePx, preset.inkColor) > maxHeight) {
+    while (sizePx > plateHeight * 0.055f && measureText(preset.label, sizePx, Color(preset.inkColor)) > maxHeight) {
         sizePx *= 0.9f
     }
-    val codePaint = textPaint(preset.inkColor, sizePx)
+    val codePaint = textPaint(Color(preset.inkColor), sizePx)
     val cx = left + plateWidth * 0.5f
     val cy = top + plateHeight * 0.72f
     canvas.save()

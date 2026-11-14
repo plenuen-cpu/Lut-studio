@@ -3,6 +3,7 @@ package com.plenuen.filmcam.camera
 import android.graphics.SurfaceTexture
 import android.view.Surface
 import androidx.camera.core.Preview
+import androidx.camera.core.SurfaceRequest
 import java.util.concurrent.Executor
 
 /**
@@ -13,7 +14,7 @@ import java.util.concurrent.Executor
  */
 class PreviewSurfaceGateway(private val executor: Executor) : Preview.SurfaceProvider {
 
-    private var pendingRequest: Preview.SurfaceProvider.Request? = null
+    private var pendingRequest: SurfaceRequest? = null
     private var texture: SurfaceTexture? = null
     private var surface: Surface? = null
 
@@ -28,7 +29,7 @@ class PreviewSurfaceGateway(private val executor: Executor) : Preview.SurfacePro
         }
     }
 
-    override fun onSurfaceRequested(request: Preview.SurfaceProvider.Request) {
+    override fun onSurfaceRequested(request: SurfaceRequest) {
         if (texture == null) {
             pendingRequest = request
         } else {
@@ -42,7 +43,7 @@ class PreviewSurfaceGateway(private val executor: Executor) : Preview.SurfacePro
         surface = null
     }
 
-    private fun attach(request: Preview.SurfaceProvider.Request) {
+    private fun attach(request: SurfaceRequest) {
         val surfaceTexture = texture ?: return
         pendingRequest = null
         val resolution = request.resolution

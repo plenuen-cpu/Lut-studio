@@ -18,11 +18,13 @@ class Affine2Test {
 
     @Test
     fun clockwiseQuarterTurnMovesTopLeftToTopRight() {
-        // A source pixel at the top-left corner ends up at the top-right after a 90° CW turn.
+        // Destination uv maps back to the source uv shown there. After a 90 degree clockwise turn
+        // the source top-left corner is displayed at the top-right of the frame.
         val rotation = Affine2.contentRotation(90, mirror = false)
-        assertPoint(0f, 1f, rotation, 1f, 1f)
-        assertPoint(1f, 0f, rotation, 0f, 1f)
-        assertPoint(1f, 1f, rotation, 0f, 0f)
+        assertPoint(0f, 1f, rotation, 1f, 1f) // top-right <- source top-left
+        assertPoint(0f, 0f, rotation, 0f, 1f) // top-left <- source bottom-left
+        assertPoint(1f, 0f, rotation, 0f, 0f) // bottom-left <- source bottom-right
+        assertPoint(1f, 1f, rotation, 1f, 0f) // bottom-right <- source top-right
     }
 
     @Test
@@ -33,6 +35,7 @@ class Affine2Test {
         val threeQuarters = Affine2.contentRotation(270, mirror = false)
         assertPoint(1f, 1f, threeQuarters, 0f, 1f)
         assertPoint(1f, 0f, threeQuarters, 1f, 1f)
+        assertPoint(0f, 1f, threeQuarters, 0f, 0f)
     }
 
     @Test

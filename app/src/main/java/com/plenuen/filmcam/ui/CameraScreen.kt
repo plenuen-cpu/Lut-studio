@@ -114,7 +114,7 @@ fun CameraScreen(vm: FilmCamViewModel) {
                 selected = vm.filter,
                 counts = counts,
                 total = vm.presets.size,
-                onSelect = { brand -> vm.setFilter(brand) },
+                onSelect = { brand -> vm.updateFilter(brand) },
             )
             Spacer(Modifier.height(8.dp))
             Box(
@@ -278,7 +278,7 @@ private fun BottomDeck(vm: FilmCamViewModel, onShutter: () -> Unit) {
         IntensityRow(
             value = vm.intensity,
             percent = vm.intensityPercent,
-            onChange = { value -> vm.setIntensity(value) },
+            onChange = { value -> vm.updateIntensity(value) },
         )
         Spacer(Modifier.height(2.dp))
         Row(

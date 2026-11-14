@@ -113,8 +113,8 @@ CANISTER = {
 
 # Leica / Ricoh GR: brand badge instead of a canister.
 BADGE = {
-    "Leica": {"bg": "#171717", "mark": "#E2001A", "ink": "#F5F5F5"},
-    "Ricoh GR": {"bg": "#121212", "mark": "#E4002B", "ink": "#F5F5F5"},
+    "Leica": {"body": "#171717", "body2": "#0B0B0B", "band": "#E2001A", "ink": "#F5F5F5"},
+    "Ricoh GR": {"body": "#141414", "body2": "#0A0A0A", "band": "#E4002B", "ink": "#F5F5F5"},
 }
 
 
@@ -209,9 +209,8 @@ def build_catalog(meta):
                 "label": LABELS.get(code, code),
             }
             if brand in BADGE:
-                colors = dict(BADGE[brand])
                 entry["art"] = "badge"
-                entry["colors"] = colors
+                entry["colors"] = dict(BADGE[brand])
             else:
                 if code not in CANISTER:
                     raise SystemExit("missing canister colors for " + code)

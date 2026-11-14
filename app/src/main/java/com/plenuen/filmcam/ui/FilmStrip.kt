@@ -48,7 +48,9 @@ fun FilmStrip(
 
     LaunchedEffect(presets.firstOrNull()?.idx, selectedIdx) {
         val index = presets.indexOfFirst { it.idx == selectedIdx }
-        if (index >= 0) {
+        if (index < 0) return@LaunchedEffect
+        val visible = listState.layoutInfo.visibleItemsInfo.any { it.index == index }
+        if (!visible) {
             listState.animateScrollToItem(index)
         }
     }

@@ -74,14 +74,14 @@ class FilmCamViewModel(application: Application) : AndroidViewModel(application)
 
     fun selectPreset(preset: LutPreset) = selectPreset(preset.idx)
 
-    fun setFilter(brand: String) {
+    fun updateFilter(brand: String) {
         filter = brand
         if (brand != PresetCatalog.BRAND_ALL && preset.brand != brand) {
             library.presetsFor(brand).firstOrNull()?.let { selectPreset(it.idx) }
         }
     }
 
-    fun setIntensity(value: Float) {
+    fun updateIntensity(value: Float) {
         intensity = value.coerceIn(0f, 1f)
     }
 
