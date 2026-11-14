@@ -1,0 +1,967 @@
+{
+ "version": 1,
+ "lutSize": 17,
+ "residuals": "lut_residuals.bin",
+ "residualsEncoding": "zlib",
+ "source": "Tonefinder 2.0.1 built-in 3D LUTs (Lorenzo residual blob), presets 1-57",
+ "presets": [
+  {
+   "slot": 1,
+   "idx": 0,
+   "brand": "Kodak",
+   "cat": "Slide Film",
+   "code": "KA1",
+   "name": "KA1 · Kodak Ektachrome E100G",
+   "display": "Kodak Ektachrome E100G",
+   "label": "E100G",
+   "art": "canister",
+   "colors": {
+    "body": "#F2A33C",
+    "body2": "#DE7A26",
+    "band": "#B01B23",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 2,
+   "idx": 1,
+   "brand": "Kodak",
+   "cat": "Slide Film",
+   "code": "KA3",
+   "name": "KA3 · Kodak Ektachrome E100VS",
+   "display": "Kodak Ektachrome E100VS",
+   "label": "E100VS",
+   "art": "canister",
+   "colors": {
+    "body": "#F0A03A",
+    "body2": "#D9731F",
+    "band": "#B01B23",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 3,
+   "idx": 2,
+   "brand": "Kodak",
+   "cat": "Slide Film",
+   "code": "KA3X",
+   "name": "KA3X · Kodak Elite Chrome 100",
+   "display": "Kodak Elite Chrome 100",
+   "label": "EC100",
+   "art": "canister",
+   "colors": {
+    "body": "#EDE7DA",
+    "body2": "#D8CDB8",
+    "band": "#0B4EA2",
+    "ink": "#12305C"
+   }
+  },
+  {
+   "slot": 4,
+   "idx": 3,
+   "brand": "Kodak",
+   "cat": "Consumer Film",
+   "code": "KC25",
+   "name": "KC25 · Kodak ColorPlus 200",
+   "display": "Kodak ColorPlus 200",
+   "label": "CP200",
+   "art": "canister",
+   "colors": {
+    "body": "#FFC72C",
+    "body2": "#F0A400",
+    "band": "#C8102E",
+    "ink": "#151515"
+   }
+  },
+  {
+   "slot": 5,
+   "idx": 4,
+   "brand": "Kodak",
+   "cat": "Portrait Film",
+   "code": "KCP2",
+   "name": "KCP2 · Kodak Portra 200",
+   "display": "Kodak Portra 200",
+   "label": "P200",
+   "art": "canister",
+   "colors": {
+    "body": "#F3D9BC",
+    "body2": "#E0B98F",
+    "band": "#8B6A48",
+    "ink": "#3B2A1D"
+   }
+  },
+  {
+   "slot": 6,
+   "idx": 5,
+   "brand": "Kodak",
+   "cat": "Color Film",
+   "code": "KE1",
+   "name": "KE1 · Kodak Ektar 100",
+   "display": "Kodak Ektar 100",
+   "label": "E100",
+   "art": "canister",
+   "colors": {
+    "body": "#E8642C",
+    "body2": "#C4401A",
+    "band": "#F5C518",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 7,
+   "idx": 6,
+   "brand": "Kodak",
+   "cat": "Consumer Film",
+   "code": "KG1",
+   "name": "KG1 · Kodak Gold 100",
+   "display": "Kodak Gold 100",
+   "label": "G100",
+   "art": "canister",
+   "colors": {
+    "body": "#FFC72C",
+    "body2": "#F2A400",
+    "band": "#C8102E",
+    "ink": "#151515"
+   }
+  },
+  {
+   "slot": 8,
+   "idx": 7,
+   "brand": "Kodak",
+   "cat": "Consumer Film",
+   "code": "KG2",
+   "name": "KG2 · Kodak Gold 200",
+   "display": "Kodak Gold 200",
+   "label": "G200",
+   "art": "canister",
+   "colors": {
+    "body": "#FFC72C",
+    "body2": "#F2A400",
+    "band": "#C8102E",
+    "ink": "#151515"
+   }
+  },
+  {
+   "slot": 9,
+   "idx": 8,
+   "brand": "Kodak",
+   "cat": "Slide Film",
+   "code": "KK1",
+   "name": "KK1 · Kodak Kodachrome 64",
+   "display": "Kodak Kodachrome 64",
+   "label": "K64",
+   "art": "canister",
+   "colors": {
+    "body": "#F5C518",
+    "body2": "#E0A800",
+    "band": "#B01B23",
+    "ink": "#1A1A1A"
+   }
+  },
+  {
+   "slot": 10,
+   "idx": 9,
+   "brand": "Kodak",
+   "cat": "Slide Film",
+   "code": "KK2",
+   "name": "KK2 · Kodak Kodachrome 200",
+   "display": "Kodak Kodachrome 200",
+   "label": "K200",
+   "art": "canister",
+   "colors": {
+    "body": "#F5C518",
+    "body2": "#E0A800",
+    "band": "#B01B23",
+    "ink": "#1A1A1A"
+   }
+  },
+  {
+   "slot": 11,
+   "idx": 10,
+   "brand": "Kodak",
+   "cat": "Portra Series",
+   "code": "KP1",
+   "name": "KP1 · Kodak Portra 160NC",
+   "display": "Kodak Portra 160NC",
+   "label": "160NC",
+   "art": "canister",
+   "colors": {
+    "body": "#F1D6B8",
+    "body2": "#DDB489",
+    "band": "#8B6A48",
+    "ink": "#3B2A1D"
+   }
+  },
+  {
+   "slot": 12,
+   "idx": 11,
+   "brand": "Kodak",
+   "cat": "Portra Series",
+   "code": "KP2",
+   "name": "KP2 · Kodak Portra 160VC",
+   "display": "Kodak Portra 160VC",
+   "label": "160VC",
+   "art": "canister",
+   "colors": {
+    "body": "#F5DCC2",
+    "body2": "#E3BC93",
+    "band": "#8B6A48",
+    "ink": "#3B2A1D"
+   }
+  },
+  {
+   "slot": 13,
+   "idx": 12,
+   "brand": "Kodak",
+   "cat": "Portra Series",
+   "code": "KP3",
+   "name": "KP3 · Kodak Portra 400NC",
+   "display": "Kodak Portra 400NC",
+   "label": "400NC",
+   "art": "canister",
+   "colors": {
+    "body": "#F2D3B1",
+    "body2": "#DCAF84",
+    "band": "#8B6A48",
+    "ink": "#3B2A1D"
+   }
+  },
+  {
+   "slot": 14,
+   "idx": 13,
+   "brand": "Kodak",
+   "cat": "Portra Series",
+   "code": "KP4",
+   "name": "KP4 · Kodak Portra 400VC",
+   "display": "Kodak Portra 400VC",
+   "label": "400VC",
+   "art": "canister",
+   "colors": {
+    "body": "#F6DCC0",
+    "body2": "#E4BB92",
+    "band": "#8B6A48",
+    "ink": "#3B2A1D"
+   }
+  },
+  {
+   "slot": 15,
+   "idx": 14,
+   "brand": "Kodak",
+   "cat": "Portra Series",
+   "code": "KP5",
+   "name": "KP5 · Kodak Portra 400UC",
+   "display": "Kodak Portra 400UC",
+   "label": "400UC",
+   "art": "canister",
+   "colors": {
+    "body": "#F3D8BA",
+    "body2": "#E1B78D",
+    "band": "#8B6A48",
+    "ink": "#3B2A1D"
+   }
+  },
+  {
+   "slot": 16,
+   "idx": 15,
+   "brand": "Kodak",
+   "cat": "Portra Series",
+   "code": "KP6",
+   "name": "KP6 · Kodak Portra 800",
+   "display": "Kodak Portra 800",
+   "label": "P800",
+   "art": "canister",
+   "colors": {
+    "body": "#EBCDAA",
+    "body2": "#D8AC80",
+    "band": "#7A5A3C",
+    "ink": "#3B2A1D"
+   }
+  },
+  {
+   "slot": 17,
+   "idx": 16,
+   "brand": "Kodak",
+   "cat": "Portra Series",
+   "code": "KP7",
+   "name": "KP7 · Kodak Portra 160",
+   "display": "Kodak Portra 160",
+   "label": "P160",
+   "art": "canister",
+   "colors": {
+    "body": "#F1D5B6",
+    "body2": "#DCB287",
+    "band": "#8B6A48",
+    "ink": "#3B2A1D"
+   }
+  },
+  {
+   "slot": 18,
+   "idx": 17,
+   "brand": "Kodak",
+   "cat": "Portra Series",
+   "code": "KP8",
+   "name": "KP8 · Kodak Portra 400",
+   "display": "Kodak Portra 400",
+   "label": "P400",
+   "art": "canister",
+   "colors": {
+    "body": "#F4DABE",
+    "body2": "#E0B78D",
+    "band": "#8B6A48",
+    "ink": "#3B2A1D"
+   }
+  },
+  {
+   "slot": 19,
+   "idx": 18,
+   "brand": "Kodak",
+   "cat": "Portra Series",
+   "code": "KP9",
+   "name": "KP9 · Kodak Portra 800 Pushed",
+   "display": "Kodak Portra 800 Pushed",
+   "label": "800P",
+   "art": "canister",
+   "colors": {
+    "body": "#E9C9A4",
+    "body2": "#D3A579",
+    "band": "#7A5A3C",
+    "ink": "#3B2A1D"
+   }
+  },
+  {
+   "slot": 20,
+   "idx": 19,
+   "brand": "Kodak",
+   "cat": "B&W Film",
+   "code": "KT32",
+   "name": "KT32 · Kodak T-Max 3200",
+   "display": "Kodak T-Max 3200",
+   "label": "T3200",
+   "art": "canister",
+   "colors": {
+    "body": "#232323",
+    "body2": "#101010",
+    "band": "#E8E8E8",
+    "ink": "#F2F2F2"
+   }
+  },
+  {
+   "slot": 21,
+   "idx": 20,
+   "brand": "Kodak",
+   "cat": "Consumer Film",
+   "code": "KU1",
+   "name": "KU1 · Kodak UltraMax 400",
+   "display": "Kodak UltraMax 400",
+   "label": "U400",
+   "art": "canister",
+   "colors": {
+    "body": "#FFC72C",
+    "body2": "#EFA000",
+    "band": "#1B1B1B",
+    "ink": "#151515"
+   }
+  },
+  {
+   "slot": 22,
+   "idx": 21,
+   "brand": "Kodak",
+   "cat": "Consumer Film",
+   "code": "KU4",
+   "name": "KU4 · Kodak Royal Gold 400",
+   "display": "Kodak Royal Gold 400",
+   "label": "RG400",
+   "art": "canister",
+   "colors": {
+    "body": "#F7B733",
+    "body2": "#DC8B12",
+    "band": "#1B1B1B",
+    "ink": "#151515"
+   }
+  },
+  {
+   "slot": 23,
+   "idx": 22,
+   "brand": "Kodak",
+   "cat": "Consumer Film",
+   "code": "KU8",
+   "name": "KU8 · Kodak UltraMax 800",
+   "display": "Kodak UltraMax 800",
+   "label": "U800",
+   "art": "canister",
+   "colors": {
+    "body": "#F5B02E",
+    "body2": "#D9880F",
+    "band": "#1B1B1B",
+    "ink": "#151515"
+   }
+  },
+  {
+   "slot": 24,
+   "idx": 23,
+   "brand": "Kodak",
+   "cat": "B&W Film",
+   "code": "KX4",
+   "name": "KX4 · Kodak Tri-X 400",
+   "display": "Kodak Tri-X 400",
+   "label": "TX400",
+   "art": "canister",
+   "colors": {
+    "body": "#1C1C1C",
+    "body2": "#0C0C0C",
+    "band": "#E8E8E8",
+    "ink": "#F2F2F2"
+   }
+  },
+  {
+   "slot": 25,
+   "idx": 24,
+   "brand": "Fujifilm",
+   "cat": "Slide Film",
+   "code": "FA1",
+   "name": "FA1 · Fuji Astia 100F",
+   "display": "Fujifilm Astia 100F",
+   "label": "A100F",
+   "art": "canister",
+   "colors": {
+    "body": "#0F7A45",
+    "body2": "#0A5A32",
+    "band": "#F2F2F2",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 26,
+   "idx": 25,
+   "brand": "Fujifilm",
+   "cat": "Slide Film",
+   "code": "FF5",
+   "name": "FF5 · Fuji Fortia SP 50",
+   "display": "Fujifilm Fortia SP 50",
+   "label": "F50",
+   "art": "canister",
+   "colors": {
+    "body": "#0B6B3A",
+    "body2": "#084E2A",
+    "band": "#F5C518",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 27,
+   "idx": 26,
+   "brand": "Fujifilm",
+   "cat": "B&W Film",
+   "code": "FN16",
+   "name": "FN16 · Fuji Neopan 1600",
+   "display": "Fujifilm Neopan 1600",
+   "label": "N1600",
+   "art": "canister",
+   "colors": {
+    "body": "#1B1B1B",
+    "body2": "#0B0B0B",
+    "band": "#E8E8E8",
+    "ink": "#F2F2F2"
+   }
+  },
+  {
+   "slot": 28,
+   "idx": 27,
+   "brand": "Fujifilm",
+   "cat": "Instant & Pro",
+   "code": "FP1",
+   "name": "FP1 · Fuji FP-100c",
+   "display": "Fujifilm FP-100c",
+   "label": "FP100C",
+   "art": "canister",
+   "colors": {
+    "body": "#117A4C",
+    "body2": "#0B5734",
+    "band": "#F2F2F2",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 29,
+   "idx": 28,
+   "brand": "Fujifilm",
+   "cat": "Instant & Pro",
+   "code": "FP2",
+   "name": "FP2 · Fuji Pro 160C",
+   "display": "Fujifilm Pro 160C",
+   "label": "160C",
+   "art": "canister",
+   "colors": {
+    "body": "#12794A",
+    "body2": "#0C5936",
+    "band": "#F2F2F2",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 30,
+   "idx": 29,
+   "brand": "Fujifilm",
+   "cat": "Instant & Pro",
+   "code": "FP4",
+   "name": "FP4 · Fuji Pro 400H",
+   "display": "Fujifilm Pro 400H",
+   "label": "400H",
+   "art": "canister",
+   "colors": {
+    "body": "#12805A",
+    "body2": "#0B5A3E",
+    "band": "#F2F2F2",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 31,
+   "idx": 30,
+   "brand": "Fujifilm",
+   "cat": "Instant & Pro",
+   "code": "FP8",
+   "name": "FP8 · Fuji Pro 800Z",
+   "display": "Fujifilm Pro 800Z",
+   "label": "800Z",
+   "art": "canister",
+   "colors": {
+    "body": "#0F7350",
+    "body2": "#0A5238",
+    "band": "#F2F2F2",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 32,
+   "idx": 31,
+   "brand": "Fujifilm",
+   "cat": "Color Film",
+   "code": "FR4",
+   "name": "FR4 · Fuji Reala 100",
+   "display": "Fujifilm Reala 100",
+   "label": "R100",
+   "art": "canister",
+   "colors": {
+    "body": "#0E7C4A",
+    "body2": "#095733",
+    "band": "#F5C518",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 33,
+   "idx": 32,
+   "brand": "Fujifilm",
+   "cat": "Color Film",
+   "code": "FR4X",
+   "name": "FR4X · Fuji Reala 100 Cross",
+   "display": "Fujifilm Reala 100 Cross",
+   "label": "R100X",
+   "art": "canister",
+   "colors": {
+    "body": "#0C6B4C",
+    "body2": "#084A34",
+    "band": "#F5C518",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 34,
+   "idx": 33,
+   "brand": "Fujifilm",
+   "cat": "Consumer Film",
+   "code": "FS1",
+   "name": "FS1 · Fuji Superia 100",
+   "display": "Fujifilm Superia 100",
+   "label": "S100",
+   "art": "canister",
+   "colors": {
+    "body": "#118A4E",
+    "body2": "#0B6135",
+    "band": "#F2F2F2",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 35,
+   "idx": 34,
+   "brand": "Fujifilm",
+   "cat": "Consumer Film",
+   "code": "FS4",
+   "name": "FS4 · Fuji Superia 400",
+   "display": "Fujifilm Superia 400",
+   "label": "S400",
+   "art": "canister",
+   "colors": {
+    "body": "#0F7C46",
+    "body2": "#0A5730",
+    "band": "#F2F2F2",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 36,
+   "idx": 35,
+   "brand": "Fujifilm",
+   "cat": "Consumer Film",
+   "code": "FS16",
+   "name": "FS16 · Fuji Superia 1600",
+   "display": "Fujifilm Superia 1600",
+   "label": "S1600",
+   "art": "canister",
+   "colors": {
+    "body": "#0D6E3E",
+    "body2": "#094D2A",
+    "band": "#F2F2F2",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 37,
+   "idx": 36,
+   "brand": "Fujifilm",
+   "cat": "Tungsten Film",
+   "code": "FT6",
+   "name": "FT6 · Fuji T64 Tungsten",
+   "display": "Fujifilm T64 Tungsten",
+   "label": "T64",
+   "art": "canister",
+   "colors": {
+    "body": "#12305C",
+    "body2": "#0A1E3C",
+    "band": "#F2F2F2",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 38,
+   "idx": 37,
+   "brand": "Fujifilm",
+   "cat": "Slide Film",
+   "code": "FV5",
+   "name": "FV5 · Fuji Velvia 50",
+   "display": "Fujifilm Velvia 50",
+   "label": "V50",
+   "art": "canister",
+   "colors": {
+    "body": "#0A3B2A",
+    "body2": "#06281C",
+    "band": "#C9A227",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 39,
+   "idx": 38,
+   "brand": "Agfa",
+   "cat": "Golden Autumn",
+   "code": "AGA1",
+   "name": "AGA1 · Agfa Optima 100 II",
+   "display": "Agfa Optima 100 II",
+   "label": "O100",
+   "art": "canister",
+   "colors": {
+    "body": "#D6001C",
+    "body2": "#A80015",
+    "band": "#F2F2F2",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 40,
+   "idx": 39,
+   "brand": "Agfa",
+   "cat": "Golden Autumn",
+   "code": "AGA2",
+   "name": "AGA2 · Agfa Optima 200",
+   "display": "Agfa Optima 200",
+   "label": "O200",
+   "art": "canister",
+   "colors": {
+    "body": "#D6001C",
+    "body2": "#A80015",
+    "band": "#F2F2F2",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 41,
+   "idx": 40,
+   "brand": "Agfa",
+   "cat": "Golden Autumn",
+   "code": "AGA3",
+   "name": "AGA3 · Agfa Portrait XPS 160",
+   "display": "Agfa Portrait XPS 160",
+   "label": "XPS160",
+   "art": "canister",
+   "colors": {
+    "body": "#C4001A",
+    "body2": "#960013",
+    "band": "#F2F2F2",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 42,
+   "idx": 41,
+   "brand": "Agfa",
+   "cat": "Color Film",
+   "code": "AU1",
+   "name": "AU1 · Agfa Ultra 100",
+   "display": "Agfa Ultra 100",
+   "label": "U100",
+   "art": "canister",
+   "colors": {
+    "body": "#E00020",
+    "body2": "#B00018",
+    "band": "#F5C518",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 43,
+   "idx": 42,
+   "brand": "Agfa",
+   "cat": "Color Film",
+   "code": "AU5",
+   "name": "AU5 · Agfa Ultra 50",
+   "display": "Agfa Ultra 50",
+   "label": "U50",
+   "art": "canister",
+   "colors": {
+    "body": "#E00020",
+    "body2": "#B00018",
+    "band": "#F5C518",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 44,
+   "idx": 43,
+   "brand": "Agfa",
+   "cat": "Color Film",
+   "code": "AV4",
+   "name": "AV4 · Agfa Vista 400",
+   "display": "Agfa Vista 400",
+   "label": "V400",
+   "art": "canister",
+   "colors": {
+    "body": "#D6001C",
+    "body2": "#A80015",
+    "band": "#F2F2F2",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 45,
+   "idx": 44,
+   "brand": "Agfa",
+   "cat": "Color Film",
+   "code": "AV8",
+   "name": "AV8 · Agfa Vista 800",
+   "display": "Agfa Vista 800",
+   "label": "V800",
+   "art": "canister",
+   "colors": {
+    "body": "#C4001A",
+    "body2": "#960013",
+    "band": "#F2F2F2",
+    "ink": "#FFFFFF"
+   }
+  },
+  {
+   "slot": 46,
+   "idx": 45,
+   "brand": "Ilford",
+   "cat": "B&W Film",
+   "code": "IH5",
+   "name": "IH5 · Ilford HP5 Plus 400",
+   "display": "Ilford HP5 Plus 400",
+   "label": "HP5",
+   "art": "canister",
+   "colors": {
+    "body": "#1A1A1A",
+    "body2": "#0A0A0A",
+    "band": "#F2F2F2",
+    "ink": "#F5F5F5"
+   }
+  },
+  {
+   "slot": 47,
+   "idx": 46,
+   "brand": "Leica",
+   "cat": "Leica LUX",
+   "code": "L1",
+   "name": "L1 · Leica Authentic (Leitz)",
+   "display": "Leica Authentic (Leitz)",
+   "label": "AUTH",
+   "art": "badge",
+   "colors": {
+    "bg": "#171717",
+    "mark": "#E2001A",
+    "ink": "#F5F5F5"
+   }
+  },
+  {
+   "slot": 48,
+   "idx": 47,
+   "brand": "Leica",
+   "cat": "Leica LUX",
+   "code": "L2",
+   "name": "L2 · Leica Vibrant",
+   "display": "Leica Vibrant",
+   "label": "VIB",
+   "art": "badge",
+   "colors": {
+    "bg": "#171717",
+    "mark": "#E2001A",
+    "ink": "#F5F5F5"
+   }
+  },
+  {
+   "slot": 49,
+   "idx": 48,
+   "brand": "Leica",
+   "cat": "Leica LUX",
+   "code": "L3",
+   "name": "L3 · Leica Classic Brass",
+   "display": "Leica Classic Brass",
+   "label": "BRASS",
+   "art": "badge",
+   "colors": {
+    "bg": "#171717",
+    "mark": "#E2001A",
+    "ink": "#F5F5F5"
+   }
+  },
+  {
+   "slot": 50,
+   "idx": 49,
+   "brand": "Leica",
+   "cat": "Leica LUX",
+   "code": "L4",
+   "name": "L4 · Leica Contemporary",
+   "display": "Leica Contemporary",
+   "label": "CONT",
+   "art": "badge",
+   "colors": {
+    "bg": "#171717",
+    "mark": "#E2001A",
+    "ink": "#F5F5F5"
+   }
+  },
+  {
+   "slot": 51,
+   "idx": 50,
+   "brand": "Leica",
+   "cat": "Leica Mono",
+   "code": "LM1",
+   "name": "LM1 · Leica Monochrom Natural",
+   "display": "Leica Monochrom Natural",
+   "label": "MONO",
+   "art": "badge",
+   "colors": {
+    "bg": "#171717",
+    "mark": "#E2001A",
+    "ink": "#F5F5F5"
+   }
+  },
+  {
+   "slot": 52,
+   "idx": 51,
+   "brand": "Leica",
+   "cat": "Leica Mono",
+   "code": "LM2",
+   "name": "LM2 · Leica Monochrom High Contrast",
+   "display": "Leica Monochrom High Contrast",
+   "label": "MONO+",
+   "art": "badge",
+   "colors": {
+    "bg": "#171717",
+    "mark": "#E2001A",
+    "ink": "#F5F5F5"
+   }
+  },
+  {
+   "slot": 53,
+   "idx": 52,
+   "brand": "Ricoh GR",
+   "cat": "GR III / IIIx",
+   "code": "GR1",
+   "name": "GR1 · GR Positive Film",
+   "display": "GR Positive Film",
+   "label": "POSI",
+   "art": "badge",
+   "colors": {
+    "bg": "#121212",
+    "mark": "#E4002B",
+    "ink": "#F5F5F5"
+   }
+  },
+  {
+   "slot": 54,
+   "idx": 53,
+   "brand": "Ricoh GR",
+   "cat": "GR III / IIIx",
+   "code": "GR2",
+   "name": "GR2 · GR Negative Film",
+   "display": "GR Negative Film",
+   "label": "NEGA",
+   "art": "badge",
+   "colors": {
+    "bg": "#121212",
+    "mark": "#E4002B",
+    "ink": "#F5F5F5"
+   }
+  },
+  {
+   "slot": 55,
+   "idx": 54,
+   "brand": "Ricoh GR",
+   "cat": "GR III / IIIx",
+   "code": "GR3",
+   "name": "GR3 · GR Bleach Bypass",
+   "display": "GR Bleach Bypass",
+   "label": "BLEACH",
+   "art": "badge",
+   "colors": {
+    "bg": "#121212",
+    "mark": "#E4002B",
+    "ink": "#F5F5F5"
+   }
+  },
+  {
+   "slot": 56,
+   "idx": 55,
+   "brand": "Ricoh GR",
+   "cat": "GR III / IIIx",
+   "code": "GR4",
+   "name": "GR4 · GR Cross Process",
+   "display": "GR Cross Process",
+   "label": "CROSS",
+   "art": "badge",
+   "colors": {
+    "bg": "#121212",
+    "mark": "#E4002B",
+    "ink": "#F5F5F5"
+   }
+  },
+  {
+   "slot": 57,
+   "idx": 56,
+   "brand": "Ricoh GR",
+   "cat": "GR III / IIIx",
+   "code": "GR5",
+   "name": "GR5 · GR Hi-Contrast B&W",
+   "display": "GR Hi-Contrast B&W",
+   "label": "HICON",
+   "art": "badge",
+   "colors": {
+    "bg": "#121212",
+    "mark": "#E4002B",
+    "ink": "#F5F5F5"
+   }
+  }
+ ]
+}
