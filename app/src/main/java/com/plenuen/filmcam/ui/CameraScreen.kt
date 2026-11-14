@@ -61,6 +61,9 @@ fun CameraScreen(vm: FilmCamViewModel) {
     }
     val controller = remember(lifecycleOwner) { CameraController(context, lifecycleOwner) }
     val glHolder = remember { mutableStateOf<GlPreviewView?>(null) }
+    // The GL context can be lost while the app is in the background: the renderer then makes a new
+    // SurfaceTexture (2nd time onwards) and the camera has to be handed the new surface again.
+    val surfaceGenerations = remember { intArrayOf(0) }
 
     SideEffect {
         controller.onError = { message -> vm.showMessage(message) }
@@ -136,7 +139,13 @@ fun CameraScreen(vm: FilmCamViewModel) {
                         factory = { ctx ->
                             GlPreviewView(ctx).also { view ->
                                 view.lutRenderer.onSurfaceTextureCreated = { texture ->
-                                    view.post { gateway.onTextureReady(texture) }
+                                    view.post {
+                                        gateway.onTextureReady(texture)
+                                        surfaceGenerations[0] += 1
+                                        if (surfaceGenerations[0] > 1) {
+                                            controller.open(gateway, vm.lensFacing)
+                                        }
+                                    }
                                 }
                                 view.lutRenderer.requestFrame = { view.requestRender() }
                                 view.lutRenderer.onGlError = { message ->

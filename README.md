@@ -71,6 +71,12 @@ GitHub Actions(`.github/workflows/android.yml`)가 `main` 푸시마다
    **Workflows: Read and write** 로 변경한 뒤 `ci/android-workflow.yml` 을 `.github/workflows/android.yml` 로 이동
 2. 또는 GitHub 웹 편집기에서 `.github/workflows/android.yml` 을 만들고 `ci/android-workflow.yml` 내용을 붙여넣기
 
+## 내려받기
+
+최신 APK: <https://github.com/plenuen-cpu/Lut-studio/releases/latest>
+
+![필름스트립 아트](docs/filmstrip-preview.png)
+
 ## 설치
 
 릴리스에서 `FilmCam-debug.apk`를 받아 설치하세요. CI가 매번 새 디버그 키로 서명하므로
