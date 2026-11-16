@@ -93,7 +93,7 @@ class PhotoStore(private val context: Context) {
 
     companion object {
         private const val TAG = "LumenPhoto"
-        const val MAX_EXPORT_EDGE = 8192
+        const val MAX_EXPORT_EDGE = 7000
 
         /** Downscale helper used when the device GL texture limit is smaller than the photo. */
         fun capForGl(bitmap: Bitmap, maxTexture: Int): Bitmap {

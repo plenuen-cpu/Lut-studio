@@ -159,12 +159,24 @@ class PhotoProgram {
             1f, 1f, 1f, 0f,
         )
 
-        fun vertexBuffer(): FloatBuffer = ByteBuffer
-            .allocateDirect(VERTICES.size * 4)
+        /**
+         * Same quad with the image drawn upside down, used by the exporter: glReadPixels starts at
+         * the bottom row, so drawing flipped makes the read-back buffer already top-down and it can
+         * be copied straight into a Bitmap (no second full-size pixel array).
+         */
+        val FLIPPED_VERTICES: FloatArray = floatArrayOf(
+            -1f, -1f, 0f, 0f,
+            1f, -1f, 1f, 0f,
+            -1f, 1f, 0f, 1f,
+            1f, 1f, 1f, 1f,
+        )
+
+        fun vertexBuffer(vertices: FloatArray = VERTICES): FloatBuffer = ByteBuffer
+            .allocateDirect(vertices.size * 4)
             .order(ByteOrder.nativeOrder())
             .asFloatBuffer()
             .apply {
-                put(VERTICES)
+                put(vertices)
                 position(0)
             }
 

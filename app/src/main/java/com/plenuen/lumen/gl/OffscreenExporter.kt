@@ -133,12 +133,15 @@ class OffscreenExporter {
                 lutEnabled = lutReady && recipe.lutIndex() >= 0,
             )
 
-            val vertices = PhotoProgram.vertexBuffer()
+            val vertices = PhotoProgram.vertexBuffer(PhotoProgram.FLIPPED_VERTICES)
             val buffers = IntArray(1)
             GLES30.glGenBuffers(1, buffers, 0)
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, buffers[0])
             GLES30.glBufferData(
-                GLES30.GL_ARRAY_BUFFER, PhotoProgram.VERTICES.size * 4, vertices, GLES30.GL_STATIC_DRAW,
+                GLES30.GL_ARRAY_BUFFER,
+                PhotoProgram.FLIPPED_VERTICES.size * 4,
+                vertices,
+                GLES30.GL_STATIC_DRAW,
             )
             GLES30.glEnableVertexAttribArray(0)
             GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 16, 0)
@@ -154,13 +157,14 @@ class OffscreenExporter {
             GLES30.glReadPixels(0, 0, width, height, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, buffer)
             buffer.rewind()
 
-            val rowBytes = width * 4
+            // 사진을 뒤집어 그렸으므로 glReadPixels의 첫 행이 사진의 윗줄이다.
+            // GL은 RGBA 바이트 순서로 주므로 int 픽셀(ARGB_8888)로 직접 조립한다.
             val pixels = IntArray(pixelCount)
+            val rowBytes = width * 4
             val row = ByteArray(rowBytes)
             for (y in 0 until height) {
                 buffer.get(row, 0, rowBytes)
-                val sourceY = height - 1 - y // GL origin is bottom-left
-                var outIndex = sourceY * width
+                var outIndex = y * width
                 var i = 0
                 while (i < rowBytes) {
                     val r = row[i].toInt() and 0xFF
