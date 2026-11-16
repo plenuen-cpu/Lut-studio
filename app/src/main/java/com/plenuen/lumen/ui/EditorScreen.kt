@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -65,6 +67,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -76,6 +79,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.plenuen.lumen.LumenDiagnostics
 import com.plenuen.lumen.core.HslBand
 import com.plenuen.lumen.core.Param
 import com.plenuen.lumen.core.ParamGroup
@@ -776,7 +780,9 @@ private fun LlmSettingsDialog(
         onDismissRequest = onDismiss,
         title = { Text("로컬 LLM", fontSize = 16.sp) },
         text = {
-            Column {
+            val context = LocalContext.current
+            var failures by remember { mutableStateOf(LumenDiagnostics.read(context)) }
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text(
                     "인터넷 없이 기기에서 문장을 읽습니다. 모델은 필요할 때만 내려받고, 사진은 어디로도 나가지 않습니다.",
                     fontSize = 12.sp,
@@ -816,6 +822,31 @@ private fun LlmSettingsDialog(
                 if (state.llm.status.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
                     Text(state.llm.status, fontSize = 11.sp, color = LumenPalette.TextDim)
+                }
+                // 현장 보고 대응: 앱이 닫혔거나 요청을 처리하지 못했으면 그 이유가 여기 남아 있다.
+                failures?.let { log ->
+                    Spacer(Modifier.height(12.dp))
+                    Text("최근 오류 기록", fontSize = 12.sp, color = LumenPalette.Accent)
+                    Text(
+                        log.takeLast(1200),
+                        fontSize = 9.sp,
+                        color = LumenPalette.TextDim,
+                        maxLines = 16,
+                    )
+                    Row {
+                        TextButton(onClick = {
+                            runCatching {
+                                val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+                                clipboard?.setPrimaryClip(
+                                    android.content.ClipData.newPlainText("Lumen 오류 기록", log),
+                                )
+                            }
+                        }) { Text("복사", fontSize = 11.sp) }
+                        TextButton(onClick = {
+                            LumenDiagnostics.clear(context)
+                            failures = null
+                        }) { Text("기록 지우기", fontSize = 11.sp) }
+                    }
                 }
             }
         },

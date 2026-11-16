@@ -6,6 +6,8 @@ import com.plenuen.lumen.core.EditRecipe
 import com.plenuen.lumen.core.Param
 import com.plenuen.lumen.core.ParamGroup
 import com.plenuen.lumen.core.RecipeSession
+import com.plenuen.lumen.LumenDiagnostics
+import com.plenuen.lumen.nl.PromptEngine
 import com.plenuen.lumen.data.LutLibrary
 import com.plenuen.lumen.data.LutPreset
 import com.plenuen.lumen.geom.StraightenEstimator
@@ -137,12 +139,12 @@ class EditorViewModel(
     // ── 사진 열기 ─────────────────────────────────────────────────────────
 
     fun openPhoto(uri: android.net.Uri) {
-        scope.launch {
+        safeLaunch("openPhoto") {
             _state.update { it.copy(busy = "사진을 여는 중…") }
             val loaded = withContext(Dispatchers.IO) { photoStore.loadPreview(uri) }
             if (loaded == null) {
                 _state.update { it.copy(busy = null, message = "사진을 열 수 없습니다.") }
-                return@launch
+                return@safeLaunch
             }
             val stats = withContext(Dispatchers.Default) { analyze(loaded.bitmap) }
             val straight = withContext(Dispatchers.Default) { estimateStraight(loaded.bitmap) }
@@ -194,7 +196,7 @@ class EditorViewModel(
 
     /** Builds the region mask off the UI thread; region sliders stay inert until it lands. */
     private fun buildMask(bitmap: Bitmap) {
-        scope.launch {
+        safeLaunch("buildMask") {
             val mask = withContext(Dispatchers.Default) {
                 runCatching { maskGenerator.generate(bitmap) }.getOrNull()
             }
@@ -218,193 +220,83 @@ class EditorViewModel(
 
     // ── 자연어 ────────────────────────────────────────────────────────────
 
+    /**
+     * Applies one typed sentence.
+     *
+     * The rules themselves live in [PromptEngine] so this method only moves the UI state; that also
+     * means the exact code the app runs is covered by unit tests instead of only by hand on a phone.
+     * This is the one place that must never take the app down with it: whatever the engine, the card
+     * or the model probe throws is recorded in [LumenDiagnostics] and shown as a card, so a bad
+     * sentence costs a message rather than the session the user was in.
+     */
     fun submitPrompt(text: String) {
         val trimmed = text.trim()
         if (trimmed.isEmpty() || !_state.value.loaded) return
-        val parsed = NaturalLanguageParser.parse(trimmed)
-        val current = _state.value
-        // "자동 보정", "NIMA 높여줘", "점수 잘 나오게" — 점수판(NIMA)을 쓴 자동 보정으로 바로 넘긴다.
-        if (parsed.nimaAuto) {
-            autoEnhance()
-            return
-        }
-        val before = session.current
-        var applied = false
-        var appliedLutName: String? = null
-        val summaryParts = mutableListOf<String>()
-
-        // 1) 대화 제어
-        when (parsed.control) {
-            NaturalLanguageParser.Control.UNDO -> {
-                session.undo()
-                applied = true
-                summaryParts += "되돌림"
+        try {
+            val result = PromptEngine.apply(
+                text = trimmed,
+                session = session,
+                scene = _state.value.scene,
+                lutFinder = ::findLut,
+            )
+            // "자동 보정", "NIMA 높여줘", "점수 잘 나오게" — 점수판(NIMA)을 쓴 자동 보정으로 바로 넘긴다.
+            if (result.nimaAuto) {
+                autoEnhance()
+                return
             }
-            NaturalLanguageParser.Control.REDO -> {
-                session.redo()
-                applied = true
-                summaryParts += "다시 실행"
-            }
-            NaturalLanguageParser.Control.RESET -> {
-                session.reset()
-                applied = true
-                summaryParts += "초기화"
-            }
-            NaturalLanguageParser.Control.HALF -> {
-                session.halveLast()
-                applied = true
-                summaryParts += "절반으로"
-            }
-            NaturalLanguageParser.Control.MORE -> {
-                session.repeatLast(1f)
-                applied = true
-                summaryParts += "한 번 더"
-            }
-            NaturalLanguageParser.Control.LESS -> {
-                session.repeatLast(-0.5f)
-                applied = true
-                summaryParts += "조금 덜"
-            }
-            NaturalLanguageParser.Control.COMPARE -> {
+            if (result.compareRequested) {
                 _state.update { it.copy(compare = true) }
-                applied = true
-                summaryParts += "원본 비교"
-                scope.launch {
-                    kotlinx.coroutines.delay(1500)
+                safeLaunch("compare") {
+                    delay(1500)
                     _state.update { it.copy(compare = false) }
                 }
             }
-            null -> {}
-        }
+            if (!result.applied) {
+                // 사전에 없는 표현은 곧바로 로컬 LLM 추론 경로로 넘긴다.
+                safeLaunch("submitPrompt/model") { interpretWithLlm(trimmed, result.before) }
+                return
+            }
+            if (result.autoStraightenRequested) autoStraighten(announce = false)
+            result.lutPreset?.let { preset -> decodeLut(preset) }
 
-        // 2) 수평·수직
-        if (parsed.autoStraighten) {
-            autoStraighten(announce = false)
-            applied = true
-            summaryParts += "수평·수직 맞춤"
-        }
-        parsed.straightenDeg?.let { degrees ->
-            session.apply(
-                "수평 ${"%.1f".format(degrees)}°",
-                com.plenuen.lumen.core.RecipeDelta.set("수평", Param.STRAIGHTEN_DEG, degrees),
-            )
-            applied = true
-            summaryParts += "수평 ${"%.1f".format(degrees)}°"
-        }
-
-        // 3) 룩 의도
-        if (parsed.hits.isNotEmpty()) {
-            for (hit in parsed.hits) {
-                val delta = hit.intent.aesthetic?.let { profile ->
-                    AestheticPlanner.plan(profile, current.scene)
-                } ?: hit.intent.delta
-                val strength = parsed.strengthOf(hit)
-                if (!delta.isEmpty && strength != 0f) {
-                    session.apply(hit.intent.label, delta, strength)
-                    applied = true
-                    summaryParts += "${hit.intent.label} ${(strength * 100).toInt()}%"
+            val maskWarning = if (result.wantsRegionMask && !_state.value.maskReady) {
+                "영역 마스크를 아직 만들지 못했어요. 잠시 뒤 자동으로 다시 시도해 드릴게요."
+            } else {
+                null
+            }
+            _state.update { state ->
+                val note = when (result.noteAction) {
+                    PromptEngine.NoteAction.CLEAR -> null
+                    PromptEngine.NoteAction.REPLACE ->
+                        Note(result.noteText.orEmpty(), caption = result.noteCaption)
+                    PromptEngine.NoteAction.KEEP -> state.note
                 }
-            }
-        }
-
-        // 3-1) 문장이 건 제한 ("너무 화려하지는 않게", "그레인 빼고", "부드럽게 말고")
-        if (parsed.restraints.isNotEmpty()) {
-            val label = parsed.restraints.joinToString(" · ") { it.restraint.label }
-            var next = session.current
-            for (hit in parsed.restraints) {
-                hit.restraint.delta?.let { delta -> next = next.apply(delta, parsed.strengthScale) }
-            }
-            next = parsed.restrained(next)
-            if (next != session.current) session.replace(next, label)
-            // 이미 그런 상태라 바뀐 값이 없어도 문장은 알아들은 것이므로 모델로 넘기지 않는다.
-            applied = true
-            summaryParts += label
-        }
-
-        // 3-2) 영역·색상 지시 ("인물만 화사하게", "빨강만 살리고 초록은 차분하게")
-        if (parsed.regionHits.isNotEmpty() || parsed.colorHits.isNotEmpty()) {
-            val wantsRegion = parsed.regionHits.isNotEmpty()
-            for (hit in parsed.regionHits) {
-                session.apply(hit.label, hit.delta, 1f)
-                summaryParts += hit.label
-                applied = true
-            }
-            for (hit in parsed.colorHits) {
-                session.apply(hit.label, hit.delta, 1f)
-                summaryParts += hit.label
-                applied = true
-            }
-            if (wantsRegion && !_state.value.maskReady) {
-                _state.update {
-                    it.copy(
-                        message = it.message
-                            ?: "영역 마스크를 아직 만들지 못했어요. 잠시 뒤 자동으로 다시 시도해 드릴게요.",
-                    )
-                }
-            }
-        }
-
-        // 4) LUT 지정
-        parsed.lutQuery?.let { query ->
-            val preset = findLut(query)
-            if (preset != null) {
-                val intensity = parsed.lutIntensity ?: session.current[Param.LUT_INTENSITY]
-                val recipe = session.current
-                    .with(Param.LUT_INDEX, preset.idx.toFloat())
-                    .with(Param.LUT_INTENSITY, intensity)
-                session.replace(recipe, "룩 ${preset.display}")
-                decodeLut(preset)
-                applied = true
-                appliedLutName = preset.display
-                summaryParts += preset.display
-            }
-        }
-
-        if (!applied) {
-            // 사전에 없는 표현은 곧바로 로컬 LLM 추론 경로로 넘긴다.
-            scope.launch { interpretWithLlm(trimmed, before) }
-            return
-        }
-
-
-        val after = session.current
-        val sentence = EditNarrator.describe(before, after, appliedLutName)
-        _state.update { state ->
-            val note = when (parsed.control) {
-                // 되돌리기는 새 보정이 아니라서 "방금 한 보정" 카드를 지운다.
-                NaturalLanguageParser.Control.UNDO,
-                NaturalLanguageParser.Control.REDO,
-                -> null
-                NaturalLanguageParser.Control.RESET -> Note(
-                    "모든 보정을 지우고 원본으로 되돌렸어요.",
-                    caption = "초기화",
+                state.copy(
+                    message = maskWarning ?: result.message,
+                    chips = (state.chips + result.labels).distinct().takeLast(8),
+                    note = note,
                 )
-                NaturalLanguageParser.Control.COMPARE -> state.note
-                else -> sentence?.let { text -> Note(text) } ?: state.note
             }
-            state.copy(
-                // 카드가 같은 내용을 이미 보여 주므로 스낵바는 카드가 없을 때만 띄운다.
-                message = if (note === state.note) {
-                    summaryParts.joinToString(" · ").ifBlank { null }
-                } else {
-                    null
-                },
-                chips = (state.chips + summaryParts).distinct().takeLast(8),
-                note = note,
-            )
-        }
-        pushState()
+            pushState()
 
-        // 규칙이 다 읽지 못한 나머지 문장이 남아 있으면 로컬 LLM이 그 부분만 이어서 해석한다.
-        val leftover = parsed.unmatched.trim()
-        // 한 낱말짜리 꼬리("피부", "하늘")는 이미 읽은 문장의 일부다. 두 낱말 이상이거나 세 글자
-        // 이상 남았을 때만 모델에게 물어, 알아들은 문장을 다시 해석하게 만들지 않는다.
-        val worthAsking = leftover.isNotEmpty() &&
-            (leftover.split(' ').size >= 2 || leftover.length >= 3)
-        if (worthAsking) {
-            scope.launch {
-                // 룰이 이미 반영한 뒤의 자투리 문장이라, 모델이 없을 때 다운로드 안내로 덮지 않는다.
-                if (interpretWithLlm(leftover, before, notifyMissingModel = false)) pushState()
+            result.leftoverForLlm?.let { leftover ->
+                safeLaunch("submitPrompt/leftover") {
+                    // 룰이 이미 반영한 뒤의 자투리 문장이라, 모델이 없을 때 다운로드 안내로 덮지 않는다.
+                    if (interpretWithLlm(leftover, result.before, notifyMissingModel = false)) pushState()
+                }
+            }
+        } catch (t: Throwable) {
+            LumenDiagnostics.record("submitPrompt", t)
+            _state.update {
+                it.copy(
+                    busy = null,
+                    message = null,
+                    note = Note(
+                        "이 요청을 처리하지 못했어요. 다른 말로 한 번 더 시도해 주세요. " +
+                            "(오류를 기록해 두었어요: ${t.javaClass.simpleName})",
+                        caption = "해석 오류",
+                    ),
+                )
             }
         }
     }
@@ -524,7 +416,7 @@ class EditorViewModel(
         val current = _state.value
         if (!current.loaded || current.busy != null) return
         val preview = current.preview ?: return
-        scope.launch {
+        safeLaunch("autoEnhance") {
             _state.update { it.copy(busy = "사진을 읽는 중…", nimaBusy = true) }
 
             // 1) 수평·수직 — 기운 사진을 먼저 바로 세운다(점수 후보도 이 프레임 위에서 잰다).
@@ -544,7 +436,7 @@ class EditorViewModel(
             val engine = ensureEvaluator(preview, _state.value.lutBytes)
             if (engine == null) {
                 applyRuleBasedAuto()
-                return@launch
+                return@safeLaunch
             }
             val base = session.current
             val baseScore = withContext(nimaThread) { engine.score(base) }
@@ -584,7 +476,7 @@ class EditorViewModel(
                     )
                 }
                 pushState()
-                return@launch
+                return@safeLaunch
             }
 
             val measured = result.after ?: result.before
@@ -660,13 +552,13 @@ class EditorViewModel(
         if (!state.loaded || state.nimaBusy || nimaUnavailable) return
         val bitmap = state.preview ?: return
         scoreJob?.cancel()
-        scoreJob = scope.launch {
+        scoreJob = safeLaunch("scheduleNimaScore") {
             if (!immediate) delay(700)
             // 그사이 자동 보정이 시작됐으면 중간 레시피를 재지 않는다.
-            if (_state.value.nimaBusy) return@launch
-            val engine = ensureEvaluator(bitmap, _state.value.lutBytes) ?: return@launch
+            if (_state.value.nimaBusy) return@safeLaunch
+            val engine = ensureEvaluator(bitmap, _state.value.lutBytes) ?: return@safeLaunch
             val recipe = session.current
-            val score = withContext(nimaThread) { engine.score(recipe) } ?: return@launch
+            val score = withContext(nimaThread) { engine.score(recipe) } ?: return@safeLaunch
             _state.update { it.copy(nimaScore = score) }
         }
     }
@@ -718,7 +610,7 @@ class EditorViewModel(
 
     fun autoStraighten(announce: Boolean = true) {
         val preview = _state.value.preview ?: return
-        scope.launch {
+        safeLaunch("autoStraighten") {
             val before = session.current
             val result = withContext(Dispatchers.Default) { estimateStraight(preview) }
             if (!result.isReliable) {
@@ -728,7 +620,7 @@ class EditorViewModel(
                         message = if (announce) "기울기를 찾지 못했어요. 수동으로 맞춰 주세요." else it.message,
                     )
                 }
-                return@launch
+                return@safeLaunch
             }
             session.apply(
                 "자동 수평·수직",
@@ -762,7 +654,7 @@ class EditorViewModel(
     }
 
     private fun decodeLut(preset: LutPreset) {
-        scope.launch {
+        safeLaunch("decodeLut") {
             val bytes = withContext(Dispatchers.Default) { lutLibrary?.lutFor(preset) }
             _state.update { it.copy(lutBytes = bytes, lut = preset) }
         }
@@ -813,12 +705,12 @@ class EditorViewModel(
         val current = _state.value
         val uri = current.photoUri ?: return
         if (current.busy != null) return
-        scope.launch {
+        safeLaunch("export") {
             _state.update { it.copy(busy = "원본 해상도로 내보내는 중…") }
             val full = withContext(Dispatchers.IO) { photoStore.loadFull(uri) }
             if (full == null) {
                 _state.update { it.copy(busy = null, message = "원본 사진을 다시 열 수 없습니다.") }
-                return@launch
+                return@safeLaunch
             }
             // 저장에는 비교선이 들어가지 않는다: 셰이더는 전체 보정 이미지를 그린다.
             val recipe = current.recipe
@@ -869,7 +761,7 @@ class EditorViewModel(
 
     fun downloadModel(model: LlmModel) {
         if (_state.value.llm.downloadProgress != null) return
-        scope.launch {
+        safeLaunch("downloadModel") {
             _state.update { it.copy(llm = it.llm.copy(downloadProgress = 0f, status = "내려받는 중…")) }
             val result = runCatching {
                 modelStore.download(model) { progress ->
@@ -895,7 +787,7 @@ class EditorViewModel(
     }
 
     fun deleteModel(model: LlmModel) {
-        scope.launch {
+        safeLaunch("deleteModel") {
             withContext(Dispatchers.IO) { modelStore.delete(model) }
             _state.update {
                 it.copy(llm = it.llm.copy(downloadedIds = it.llm.downloadedIds - model.id, status = "삭제했어요"))
@@ -912,6 +804,46 @@ class EditorViewModel(
             runCatching { evaluator?.close() }
             evaluator = null
             evaluatorSource = null
+        }
+    }
+
+    // ── 안전 실행 ──────────────────────────────────────────────────────────
+
+    /**
+     * Runs [block] in the view model's scope without letting a failure end the app.
+     *
+     * A throwable that escapes a coroutine goes to the thread's uncaught handler, and on Android that
+     * means the process is gone — no dialog, no trace, exactly the "입력하면 꺼져" the user reported.
+     * Everything the editor starts in the background (opening a photo, the region mask, the local
+     * model, the NIMA pass, a chart of LUT bytes) now ends here instead: recorded for the next report
+     * and shown as one card, while the open photo and its history stay as they were.
+     */
+    private fun safeLaunch(where: String, block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit): Job =
+        scope.launch {
+            try {
+                block()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                onBackgroundFailure(where, error)
+            }
+        }
+
+    /** Records a background failure and says so on screen instead of dying. */
+    private fun onBackgroundFailure(where: String, error: Throwable) {
+        LumenDiagnostics.record(where, error)
+        // NIMA가 한 번 넘어지면 점수 재측정을 멈춘다: 카드만 쌓이고 사진은 그대로면 실패를 반복할 이유가 없다.
+        if (where.startsWith("scheduleNimaScore") || where == "autoEnhance") nimaUnavailable = true
+        _state.update {
+            it.copy(
+                busy = null,
+                nimaBusy = false,
+                note = Note(
+                    "하던 작업을 끝내지 못했어요. 사진과 지금까지의 보정은 그대로예요. " +
+                        "(오류를 기록해 두었어요: ${error.javaClass.simpleName})",
+                    caption = "오류",
+                ),
+            )
         }
     }
 
