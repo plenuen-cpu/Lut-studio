@@ -18,10 +18,10 @@ data class RenderSpec(
     val imageWidth: Int,
     val imageHeight: Int,
     val compare: Boolean = false,
-    /** Preview only: top of the frame shows the untouched source, bottom shows the edit. */
+    /** Preview only: left of the line shows the untouched source, right shows the edit. */
     val splitEnabled: Boolean = false,
-    /** 0..1 position of the split line measured from the top of the photo. */
-    val splitY: Float = 0.5f,
+    /** 0..1 position of the split line measured from the left edge of the photo. */
+    val splitX: Float = 0.5f,
     /** True when a segmentation mask texture is bound (R = subject, G = sky). */
     val maskReady: Boolean = false,
     /** Preview only: paint the mask over the photo so the user can see what is targeted. */
@@ -154,7 +154,7 @@ class PhotoProgram {
         GLES30.glUniform1f(loc("uLutEnabled"), if (lutEnabled) 1f else 0f)
         GLES30.glUniform1f(loc("uCompare"), if (spec.compare) 1f else 0f)
         GLES30.glUniform1f(loc("uSplitEnabled"), if (spec.splitEnabled) 1f else 0f)
-        GLES30.glUniform1f(loc("uSplitY"), spec.splitY.coerceIn(0f, 1f))
+        GLES30.glUniform1f(loc("uSplitX"), spec.splitX.coerceIn(0f, 1f))
 
         // ── 영역 마스크 (텍스처 단위 2) ─────────────────────────────
         GLES30.glActiveTexture(GLES30.GL_TEXTURE2)
@@ -209,7 +209,7 @@ class PhotoProgram {
             "uSplitTone", "uSplitBalance", "uShadowHue", "uHighlightHue", "uSkin", "uMono",
             "uClarity", "uTextureAmt", "uDehaze", "uSharpnessAmt", "uGlow", "uHalation",
             "uGrain", "uVignette", "uFocus", "uLutIntensity", "uLutEnabled", "uCompare",
-            "uSplitEnabled", "uSplitY", "uMask", "uMaskOn", "uMaskPreview",
+            "uSplitEnabled", "uSplitX", "uMask", "uMaskOn", "uMaskPreview",
             "uSubExposure", "uSubSaturation", "uSubWarmth", "uSubClarity",
             "uBkgExposure", "uBkgSaturation", "uBkgWarmth", "uBkgClarity", "uBkgSoft",
             "uSkyExposure", "uSkySaturation", "uSkyWarmth", "uSkyBlue",

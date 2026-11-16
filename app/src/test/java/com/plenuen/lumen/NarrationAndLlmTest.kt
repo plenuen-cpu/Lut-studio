@@ -167,7 +167,7 @@ class LlmRobustnessTest {
     }
 }
 
-/** 가로 비교는 프리뷰 표시일 뿐, 저장 경로에는 절대 들어가지 않는다. */
+/** 세로 비교선은 프리뷰 표시일 뿐, 저장 경로에는 절대 들어가지 않는다. */
 class RenderSpecTest {
 
     @Test
@@ -175,13 +175,13 @@ class RenderSpecTest {
         val spec = RenderSpec(EditRecipe.NEUTRAL, 1200, 1600)
         assertFalse(spec.splitEnabled)
         assertFalse(spec.compare)
-        assertEquals(0.5f, spec.splitY, 0.001f)
+        assertEquals(0.5f, spec.splitX, 0.001f)
     }
 
     @Test
     fun splitIsCarriedOnlyWhenAsked() {
-        val spec = RenderSpec(EditRecipe.NEUTRAL, 1200, 1600, compare = false, splitEnabled = true, splitY = 0.3f)
+        val spec = RenderSpec(EditRecipe.NEUTRAL, 1200, 1600, compare = false, splitEnabled = true, splitX = 0.3f)
         assertTrue(spec.splitEnabled)
-        assertEquals(0.3f, spec.splitY, 0.001f)
+        assertEquals(0.3f, spec.splitX, 0.001f)
     }
 }

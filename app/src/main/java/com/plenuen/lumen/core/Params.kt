@@ -1,15 +1,20 @@
 package com.plenuen.lumen.core
 
-/** Slider groups in the manual panel. */
-enum class ParamGroup(val label: String) {
-    GEOMETRY("수평·구도"),
-    TONE("기본 톤"),
+/**
+ * Slider groups in the manual panel.
+ *
+ * [chip] is the one-word name used by the panel's single-line category row (v2.2.5) — the long
+ * [label] only fits a full-width header, which cost the photo too much vertical space.
+ */
+enum class ParamGroup(val label: String, val chip: String = label) {
+    GEOMETRY("수평·구도", "구도"),
+    TONE("기본 톤", "톤"),
     COLOR("색감"),
-    DETAIL("디테일·질감"),
-    FOCUS("강조·마스크"),
-    REGION("영역 보정 (인물·배경·하늘)"),
-    HSL("색상별 HSL (8색)"),
-    LUT("필름 룩"),
+    DETAIL("디테일·질감", "디테일"),
+    FOCUS("강조·마스크", "강조"),
+    REGION("영역 보정 (인물·배경·하늘)", "영역"),
+    HSL("색상별 HSL (8색)", "HSL"),
+    LUT("필름 룩", "룩"),
 }
 
 /**

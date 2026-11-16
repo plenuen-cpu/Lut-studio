@@ -77,9 +77,9 @@ class EditorViewModel(
         val canUndo: Boolean = false,
         val canRedo: Boolean = false,
         val compare: Boolean = false,
-        /** Horizontal Before/After split line on the preview (never applied to exports). */
+        /** Vertical Before/After split line on the preview (never applied to exports). */
         val split: Boolean = false,
-        val splitY: Float = 0.5f,
+        val splitX: Float = 0.5f,
         val showSliders: Boolean = false,
         /** On-device segmentation mask: R = subject, G = sky. Null until it is generated. */
         val mask: Bitmap? = null,
@@ -169,7 +169,7 @@ class EditorViewModel(
                     canUndo = false,
                     canRedo = false,
                     busy = null,
-                    splitY = 0.5f,
+                    splitX = 0.5f,
                     note = null,
                     mask = null,
                     maskReady = false,
@@ -731,6 +731,9 @@ class EditorViewModel(
 
     fun toggleSliders() = _state.update { it.copy(showSliders = !it.showSliders) }
 
+    /** 다른 하단 패널(필름 룩)을 열 때 슬라이더 패널을 접는다 — 둘이 같이 서면 사진이 다시 작아진다. */
+    fun closeSliders() = _state.update { it.copy(showSliders = false) }
+
     fun toggleMaskPreview() = _state.update { it.copy(maskPreview = !it.maskPreview) }
 
     fun toggleMask(on: Boolean) {
@@ -739,13 +742,13 @@ class EditorViewModel(
         pushState()
     }
 
-    // ── 가로 비교 ─────────────────────────────────────────────────────────
+    // ── 세로 비교 ─────────────────────────────────────────────────────────
 
     fun toggleSplit() = _state.update { it.copy(split = !it.split) }
 
-    /** Drags the split line; [delta] is a fraction of the photo height (positive = down). */
+    /** Drags the split line; [delta] is a fraction of the photo width (positive = right). */
     fun nudgeSplit(delta: Float) = _state.update {
-        it.copy(splitY = (it.splitY + delta).coerceIn(0.03f, 0.97f))
+        it.copy(splitX = (it.splitX + delta).coerceIn(0.03f, 0.97f))
     }
 
     // ── 내보내기 ──────────────────────────────────────────────────────────

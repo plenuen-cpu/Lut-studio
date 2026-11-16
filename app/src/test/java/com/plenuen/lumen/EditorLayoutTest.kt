@@ -1,6 +1,7 @@
 package com.plenuen.lumen
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -65,6 +66,57 @@ class EditorLayoutTest {
             "[새 사진]이 갤러리 선택으로 이어지지 않습니다",
             fixed.substring((newPhoto - 800).coerceAtLeast(0), newPhoto).contains("onPickPhoto"),
         )
+    }
+
+    @Test
+    fun sliderPanelLeavesThePhotoRoom() {
+        val src = editorSource()
+
+        // v2.2.5: 고정 300dp 패널 → 최대 높이 상수(170~190dp).
+        assertFalse(
+            "슬라이더 패널이 다시 고정 300dp로 돌아갔습니다 — 사진이 그만큼 작아집니다",
+            src.contains("Modifier.fillMaxWidth().height(300.dp)"),
+        )
+        val maxHeight = Regex("SLIDER_PANEL_MAX_HEIGHT = (\\d+)\\.dp").find(src)
+        assertNotNull("슬라이더 패널의 최대 높이 상수가 사라졌습니다", maxHeight)
+        val value = maxHeight!!.groupValues[1].toInt()
+        assertTrue(
+            "슬라이더 패널 최대 높이 ${value}dp — 190dp를 넘으면 사진 영역이 다시 좁아집니다",
+            value in 150..190,
+        )
+        assertTrue(
+            "패널이 최대 높이를 실제로 쓰지 않습니다",
+            src.contains("heightIn(max = SLIDER_PANEL_MAX_HEIGHT)"),
+        )
+
+        // 한 줄 카테고리 칩으로 그룹을 고르고, 고른 그룹 하나만 펼친다.
+        assertTrue("카테고리 칩 줄이 없습니다", src.contains("entry.chip"))
+        assertTrue("그룹 칩이 ParamGroup 전체를 돌지 않습니다", src.contains("ParamGroup.entries[index]"))
+        // 사진을 가리는 두 패널이 동시에 서지 않는다.
+        assertTrue(
+            "필름 룩과 슬라이더 패널을 동시에 열 수 있습니다 — 둘이 서면 사진이 절반으로 줄어듭니다",
+            src.contains("if (showLuts) viewModel.closeSliders()"),
+        )
+    }
+
+    @Test
+    fun historyAndNoteCollapseWhileAPanelIsOpen() {
+        val src = editorSource()
+
+        assertTrue(
+            "패널 열림 여부를 한 값으로 관리하지 않습니다",
+            src.contains("val panelOpen = state.showSliders || showLuts"),
+        )
+        val collapse = src.indexOf("if (!panelOpen) {")
+        assertTrue("히스토리 줄을 접는 조건이 사라졌습니다", collapse > 0)
+        // 접히는 쪽은 히스토리 칩 줄이고, 한 줄 짜리 빠른 요청은 남는다.
+        val collapsed = src.substring(collapse, src.indexOf("// 빠른 요청", collapse))
+        assertTrue("히스토리 칩 줄이 접히지 않습니다", collapsed.contains("state.steps"))
+        assertTrue("빠른 요청 줄이 사라졌습니다", src.contains("items(QUICK_PROMPTS)"))
+
+        // 내레이션 카드는 한 줄 모드로 줄인다.
+        assertTrue("보정 내역 카드가 한 줄로 접히지 않습니다", src.contains("dense = panelOpen"))
+        assertTrue("한 줄 모드가 카드에 없습니다", src.contains("maxLines = if (dense) 1 else 3"))
     }
 
     /** [open] 위치의 `{`와 짝이 맞는 `}`의 위치. 문자열 안의 중괄호는 세지 않는다. */

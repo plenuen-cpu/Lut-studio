@@ -3,9 +3,10 @@ package com.plenuen.lumen.ui
 import android.opengl.GLSurfaceView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
@@ -123,6 +125,8 @@ fun EditorScreen(
     // 키보드가 올라온 동안에는 입력창 바로 위까지만 남긴다: 프리뷰가 최대한 보이게.
     val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
     val keyboardVisible = imeBottom > 0
+    // 보정 패널(슬라이더·필름 룩)이 열린 동안은 아래 위젯을 접어 사진 자리를 지킨다.
+    val panelOpen = state.showSliders || showLuts
 
     Scaffold(
         containerColor = LumenPalette.Background,
@@ -220,18 +224,18 @@ fun EditorScreen(
                         }
                     }
                     if (state.loaded && !state.compare) {
-                        // 가로선 위/아래를 손가락으로 끌어 실시간 비교한다.
+                        // 사진 위에 세로선을 그리고, 선을 좌우로 끌어 원본과 보정을 비교한다.
                         SplitCompareOverlay(
                             imageWidth = state.imageWidth,
                             imageHeight = state.imageHeight,
-                            splitY = state.splitY,
+                            splitX = state.splitX,
                             onDrag = viewModel::nudgeSplit,
                             visible = state.split,
                         )
                         FilterChip(
                             selected = state.split,
                             onClick = { viewModel.toggleSplit() },
-                            label = { Text(if (state.split) "가로 비교 중" else "가로 비교", fontSize = 11.sp) },
+                            label = { Text(if (state.split) "세로 비교 중" else "세로 비교", fontSize = 11.sp) },
                             modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
                         )
                         if (state.maskReady) {
@@ -283,7 +287,7 @@ fun EditorScreen(
                 }
                 LaunchedEffect(
                     state.recipe, state.compare, state.imageWidth, state.imageHeight,
-                    state.split, state.splitY, state.maskReady, state.maskPreview,
+                    state.split, state.splitX, state.maskReady, state.maskPreview,
                 ) {
                     renderer.updateSpec(
                         RenderSpec(
@@ -292,7 +296,7 @@ fun EditorScreen(
                             imageHeight = state.imageHeight,
                             compare = state.compare,
                             splitEnabled = state.split,
-                            splitY = state.splitY,
+                            splitX = state.splitX,
                             maskReady = state.maskReady,
                             maskPreview = state.maskPreview,
                         ),
@@ -311,49 +315,52 @@ fun EditorScreen(
                 if (!keyboardVisible) {
                     // 적용된 보정 히스토리 — 칩 하나가 보정 한 단계다. 누르면 그 단계만 빠지고
                     // 나머지 단계는 그대로 다시 합산된다(맨 아래 '원본'은 남는다).
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        if (state.steps.isEmpty() && state.loaded) {
-                            item { Text("보정 없음", color = LumenPalette.TextDim, fontSize = 11.sp) }
-                        }
-                        items(state.steps, key = { it.id }) { step ->
-                            if (step.isOrigin) {
-                                AssistChip(
-                                    onClick = { },
-                                    label = { Text(step.title, fontSize = 11.sp) },
-                                )
-                            } else {
-                                InputChip(
-                                    selected = false,
-                                    onClick = { viewModel.removeStep(step.id) },
-                                    label = { Text(step.title, fontSize = 11.sp) },
-                                    trailingIcon = {
-                                        Icon(
-                                            Icons.Filled.Close,
-                                            contentDescription = "이 보정 지우기",
-                                            modifier = Modifier.width(14.dp).height(14.dp),
-                                            tint = LumenPalette.TextDim,
-                                        )
-                                    },
-                                )
+                    // 보정 패널이 열려 있는 동안에는 이 줄을 접어 사진 자리를 내어 준다(v2.2.5).
+                    if (!panelOpen) {
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            if (state.steps.isEmpty() && state.loaded) {
+                                item { Text("보정 없음", color = LumenPalette.TextDim, fontSize = 11.sp) }
+                            }
+                            items(state.steps, key = { it.id }) { step ->
+                                if (step.isOrigin) {
+                                    AssistChip(
+                                        onClick = { },
+                                        label = { Text(step.title, fontSize = 11.sp) },
+                                    )
+                                } else {
+                                    InputChip(
+                                        selected = false,
+                                        onClick = { viewModel.removeStep(step.id) },
+                                        label = { Text(step.title, fontSize = 11.sp) },
+                                        trailingIcon = {
+                                            Icon(
+                                                Icons.Filled.Close,
+                                                contentDescription = "이 보정 지우기",
+                                                modifier = Modifier.width(14.dp).height(14.dp),
+                                                tint = LumenPalette.TextDim,
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                            if (state.recipe.lutIndex() >= 0 && state.lut != null) {
+                                item { AssistChip(onClick = viewModel::toggleSliders, label = { Text("룩 ${state.lut?.display ?: ""}", fontSize = 11.sp) }) }
                             }
                         }
-                        if (state.recipe.lutIndex() >= 0 && state.lut != null) {
-                            item { AssistChip(onClick = viewModel::toggleSliders, label = { Text("룩 ${state.lut?.display ?: ""}", fontSize = 11.sp) }) }
+                        if (state.loaded && state.steps.size > 2) {
+                            Text(
+                                "보정 칩을 누르면 그 단계만 지워져요 · 상단 ← 되돌리기",
+                                fontSize = 10.sp,
+                                color = LumenPalette.TextDim,
+                                modifier = Modifier.padding(start = 16.dp),
+                            )
                         }
                     }
-                    if (state.loaded && state.steps.size > 2) {
-                        Text(
-                            "보정 칩을 누르면 그 단계만 지워져요 · 상단 ← 되돌리기",
-                            fontSize = 10.sp,
-                            color = LumenPalette.TextDim,
-                            modifier = Modifier.padding(start = 16.dp, bottom = 2.dp),
-                        )
-                    }
 
-                    // 빠른 요청
+                    // 빠른 요청 — 한 줄만 차지한다.
                     LazyRow(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -368,12 +375,13 @@ fun EditorScreen(
                     }
                 }
 
-                // 최근 보정 내역 (입력창 바로 위)
+                // 최근 보정 내역 (입력창 바로 위). 패널이 열려 있는 동안은 한 줄로 접는다.
                 state.note?.let { note ->
                     ChangeCard(
                         note = note,
                         onDismiss = viewModel::dismissNote,
                         onSettings = { showSettings = true },
+                        dense = panelOpen,
                     )
                 }
 
@@ -439,14 +447,21 @@ fun EditorScreen(
                                 Text("자동 수평·수직", fontSize = 12.sp)
                             }
                             FilledTonalButton(
-                                onClick = { showLuts = !showLuts },
+                                onClick = {
+                                    showLuts = !showLuts
+                                    // 두 패널이 같이 서면 사진이 다시 작아진다: 한 번에 하나만 연다.
+                                    if (showLuts) viewModel.closeSliders()
+                                },
                                 enabled = state.loaded,
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             ) {
                                 Text("필름 룩", fontSize = 12.sp)
                             }
                             FilledTonalButton(
-                                onClick = viewModel::toggleSliders,
+                                onClick = {
+                                    viewModel.toggleSliders()
+                                    if (!state.showSliders) showLuts = false
+                                },
                                 enabled = state.loaded,
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             ) {
@@ -525,11 +540,21 @@ fun EditorScreen(
  * aspect-fit arithmetic the renderer uses — otherwise the line and the shader's split drift apart on
  * photos whose shape differs from the screen.
  */
+/**
+ * Draggable vertical Before/After line.
+ *
+ * The GL view letterboxes the photo inside its own viewport, so the line is positioned with the same
+ * aspect-fit arithmetic the renderer uses — otherwise the line and the shader's split drift apart on
+ * photos whose shape differs from the screen. The shader compares `vUv.x` against `uSplitX` and the
+ * GL viewport is exactly the fitted photo rect, so `splitX` is measured across the photo, not the view.
+ *
+ * v2.2.5: the line is vertical (left = 원본, right = 보정) and drags horizontally.
+ */
 @Composable
 private fun SplitCompareOverlay(
     imageWidth: Int,
     imageHeight: Int,
-    splitY: Float,
+    splitX: Float,
     onDrag: (Float) -> Unit,
     visible: Boolean,
 ) {
@@ -542,51 +567,70 @@ private fun SplitCompareOverlay(
         }
         val imageAspect = imageWidth.toFloat() / imageHeight.toFloat()
         val boxAspect = boxWidth / boxHeight
+        // 렌더러의 fit()과 같은 계산: 사진이 실제로 그려지는 사각형.
+        val rectWidth = if (imageAspect > boxAspect) boxWidth else boxHeight * imageAspect
         val rectHeight = if (imageAspect > boxAspect) boxWidth / imageAspect else boxHeight
+        val rectLeft = (boxWidth - rectWidth) / 2f
         val rectTop = (boxHeight - rectHeight) / 2f
-        val lineY = rectTop + rectHeight * splitY.coerceIn(0f, 1f)
+        val lineX = rectLeft + rectWidth * splitX.coerceIn(0f, 1f)
         val density = LocalDensity.current
+        val rectTopDp = with(density) { rectTop.toDp() }
+        // 사진 윗변이 화면 위에 붙어 있으면 위쪽 칩(마스크 보기·세로 비교)과 겹치므로 배지를 한 줄 내린다.
+        val badgeTop = if (rectTopDp < 44.dp) rectTopDp + 44.dp else rectTopDp + 8.dp
 
-        val bandHeight = 48.dp
+        val bandWidth = 48.dp
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(bandHeight)
-                .offset(y = with(density) { lineY.toDp() } - bandHeight / 2)
-                .pointerInput(rectHeight) {
-                    detectVerticalDragGestures { change, dragAmount ->
+                .width(bandWidth)
+                .height(with(density) { rectHeight.toDp() })
+                .offset(
+                    x = with(density) { lineX.toDp() } - bandWidth / 2,
+                    y = rectTopDp,
+                )
+                .pointerInput(rectWidth) {
+                    detectHorizontalDragGestures { change, dragAmount ->
                         change.consume()
-                        if (rectHeight > 1f) onDrag(dragAmount / rectHeight)
+                        // 사진 폭에 대한 비율(0f..1f)로 넘긴다. 셰이더의 vUv.x와 같은 기준이다.
+                        if (rectWidth > 1f) onDrag(dragAmount / rectWidth)
                     }
                 },
         ) {
             Canvas(Modifier.fillMaxSize()) {
-                val y = size.height / 2f
+                val x = size.width / 2f
                 drawLine(
                     color = Color.Black.copy(alpha = 0.55f),
-                    start = Offset(0f, y),
-                    end = Offset(size.width, y),
+                    start = Offset(x, 0f),
+                    end = Offset(x, size.height),
                     strokeWidth = 3.dp.toPx(),
                 )
                 drawLine(
                     color = Color.White.copy(alpha = 0.95f),
-                    start = Offset(0f, y),
-                    end = Offset(size.width, y),
+                    start = Offset(x, 0f),
+                    end = Offset(x, size.height),
                     strokeWidth = 1.5.dp.toPx(),
                 )
             }
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .width(44.dp)
-                    .height(18.dp)
+                    .width(18.dp)
+                    .height(44.dp)
                     .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(9.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("↕", color = Color.Black, fontSize = 10.sp)
+                Text("↔", color = Color.Black, fontSize = 10.sp)
             }
-            SplitBadge("BEFORE", Modifier.align(Alignment.TopStart).padding(start = 10.dp, top = 2.dp))
-            SplitBadge("AFTER", Modifier.align(Alignment.BottomEnd).padding(end = 10.dp, bottom = 2.dp))
+        }
+
+        // 원본 / 보정 배지: 사진 사각형의 좌·우 상단. 선보다 위에 그린다.
+        Box(
+            modifier = Modifier
+                .offset(x = with(density) { rectLeft.toDp() }, y = badgeTop)
+                .width(with(density) { rectWidth.toDp() })
+                .height(with(density) { rectHeight.toDp() }),
+        ) {
+            SplitBadge("원본", Modifier.align(Alignment.TopStart).padding(horizontal = 8.dp))
+            SplitBadge("보정", Modifier.align(Alignment.TopEnd).padding(horizontal = 8.dp))
         }
     }
 }
@@ -608,31 +652,68 @@ private fun ChangeCard(
     note: EditorViewModel.Note,
     onDismiss: () -> Unit,
     onSettings: () -> Unit,
+    /** 패널이 열려 있을 때의 한 줄 모드. 사진 자리를 지키려고 캡션과 줄 수를 접는다. */
+    dense: Boolean = false,
 ) {
     Surface(
         color = LumenPalette.PanelRaised.copy(alpha = 0.94f),
         shape = RoundedCornerShape(10.dp),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = if (dense) 1.dp else 2.dp),
     ) {
         Row(
-            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            modifier = Modifier.padding(
+                start = 12.dp,
+                end = 6.dp,
+                top = if (dense) 3.dp else 8.dp,
+                bottom = if (dense) 3.dp else 8.dp,
+            ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(note.caption, fontSize = 10.sp, color = LumenPalette.Accent)
-                Spacer(Modifier.height(2.dp))
-                Text(note.text, fontSize = 12.sp, color = LumenPalette.Text, maxLines = 3)
+                if (!dense) {
+                    Text(note.caption, fontSize = 10.sp, color = LumenPalette.Accent)
+                    Spacer(Modifier.height(2.dp))
+                }
+                Text(
+                    note.text,
+                    fontSize = if (dense) 11.sp else 12.sp,
+                    color = LumenPalette.Text,
+                    maxLines = if (dense) 1 else 3,
+                )
             }
-            if (note.suggestDownload) {
-                TextButton(onClick = onSettings) { Text("설정", fontSize = 11.sp) }
-            }
-            IconButton(onClick = onDismiss) {
-                Icon(Icons.Filled.Close, contentDescription = "닫기", tint = LumenPalette.TextDim)
+            if (!dense) {
+                if (note.suggestDownload) {
+                    TextButton(onClick = onSettings) { Text("설정", fontSize = 11.sp) }
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Filled.Close, contentDescription = "닫기", tint = LumenPalette.TextDim)
+                }
+            } else {
+                // 한 줄 모드에서는 48dp 버튼이 줄 높이를 되돌려 놓으므로 작은 ×만 둔다.
+                Text(
+                    "×",
+                    fontSize = 15.sp,
+                    color = LumenPalette.TextDim,
+                    modifier = Modifier
+                        .clickable(onClick = onDismiss)
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                )
             }
         }
     }
 }
 
+/** 슬라이더 패널이 차지하는 최대 높이. 그만큼 사진 프리뷰(weight 1f)가 남는다(v2.2.5). */
+private val SLIDER_PANEL_MAX_HEIGHT = 176.dp
+
+/**
+ * 보정 슬라이더 패널 — 한 줄 카테고리 칩 + 고른 그룹 하나만 펼치는 스크롤.
+ *
+ * 예전에는 8개 그룹의 머리글과 슬라이더를 한 LazyColumn에 모두 쌓아 고정 300dp를 차지했고, 그만큼
+ * 사진 프리뷰가 쪼그라들었다(사용자 신고: "슬라이드 하면 작업 사진 영역이 너무 작아지고?").
+ * 지금은 그룹 칩 한 줄(약 34dp) + 그룹 내용 스크롤로 바꾸고, 패널 전체를 [SLIDER_PANEL_MAX_HEIGHT]로
+ * 묶어 사진이 항상 화면의 큰 몫을 차지하게 한다.
+ */
 @Composable
 private fun SliderPanel(
     recipe: com.plenuen.lumen.core.EditRecipe,
@@ -645,53 +726,70 @@ private fun SliderPanel(
     onMaskPreview: () -> Unit,
 ) {
     var bandIndex by remember { mutableStateOf(0) }
-    Surface(color = LumenPalette.Panel, modifier = Modifier.fillMaxWidth().height(300.dp)) {
-        androidx.compose.foundation.lazy.LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 8.dp),
-        ) {
-            ParamGroup.entries.forEach { group ->
-                item(key = "header-${group.name}") {
-                    Text(
-                        group.label,
-                        color = LumenPalette.Accent,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
+    var groupName by remember { mutableStateOf(ParamGroup.TONE.name) }
+    val group = ParamGroup.entries.firstOrNull { it.name == groupName } ?: ParamGroup.TONE
+    Surface(
+        color = LumenPalette.Panel,
+        modifier = Modifier.fillMaxWidth().heightIn(max = SLIDER_PANEL_MAX_HEIGHT),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().height(32.dp).padding(top = 2.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                items(ParamGroup.entries.size) { index ->
+                    val entry = ParamGroup.entries[index]
+                    FilterChip(
+                        selected = group == entry,
+                        onClick = { groupName = entry.name },
+                        label = { Text(entry.chip, fontSize = 10.sp) },
+                        modifier = Modifier.height(28.dp),
                     )
                 }
-                if (group == ParamGroup.REGION) {
-                    item(key = "region-mask") {
-                        Column {
-                            Text(
-                                if (maskReady) "마스크: $maskMethod" else "마스크 준비 중… (인물·하늘 인식)",
-                                fontSize = 10.sp,
-                                color = LumenPalette.TextDim,
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp),
+            ) {
+                when (group) {
+                    ParamGroup.REGION -> {
+                        Text(
+                            if (maskReady) "마스크: $maskMethod" else "마스크 준비 중… (인물·하늘 인식)",
+                            fontSize = 10.sp,
+                            color = LumenPalette.TextDim,
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            FilterChip(
+                                selected = recipe[Param.MASK_ON] >= 0.5f,
+                                onClick = { onMaskToggle(recipe[Param.MASK_ON] < 0.5f) },
+                                label = { Text("영역 보정", fontSize = 11.sp) },
+                                modifier = Modifier.height(28.dp),
                             )
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                FilterChip(
-                                    selected = recipe[Param.MASK_ON] >= 0.5f,
-                                    onClick = { onMaskToggle(recipe[Param.MASK_ON] < 0.5f) },
-                                    label = { Text("영역 보정", fontSize = 11.sp) },
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                FilterChip(
-                                    selected = maskPreview,
-                                    onClick = onMaskPreview,
-                                    enabled = maskReady,
-                                    label = { Text("마스크 보기", fontSize = 11.sp) },
-                                )
-                            }
+                            Spacer(Modifier.width(6.dp))
+                            FilterChip(
+                                selected = maskPreview,
+                                onClick = onMaskPreview,
+                                enabled = maskReady,
+                                label = { Text("마스크 보기", fontSize = 11.sp) },
+                                modifier = Modifier.height(28.dp),
+                            )
+                        }
+                        Param.sliders.filter { it.group == group }.forEach { param ->
+                            SliderRow(param, recipe[param], onParam)
                         }
                     }
-                }
-                if (group == ParamGroup.HSL) {
-                    item(key = "hsl-bands") {
+                    ParamGroup.HSL -> {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             items(HslBand.entries.size) { index ->
                                 val band = HslBand.entries[index]
                                 FilterChip(
                                     selected = bandIndex == index,
                                     onClick = { bandIndex = index },
+                                    modifier = Modifier.height(28.dp),
                                     label = {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Box(
@@ -707,31 +805,31 @@ private fun SliderPanel(
                                 )
                             }
                         }
-                    }
-                    val band = HslBand.entries[bandIndex.coerceIn(0, HslBand.entries.size - 1)]
-                    items(band.params.size) { index ->
-                        val param = band.params[index]
-                        SliderRow(param, recipe[param], onParam)
-                    }
-                    item(key = "hsl-reset") {
-                        TextButton(onClick = { band.params.forEach { onParam(it, 0f) } }) {
+                        val band = HslBand.entries[bandIndex.coerceIn(0, HslBand.entries.size - 1)]
+                        band.params.forEach { param -> SliderRow(param, recipe[param], onParam) }
+                        TextButton(
+                            onClick = { band.params.forEach { onParam(it, 0f) } },
+                            contentPadding = PaddingValues(horizontal = 4.dp),
+                        ) {
                             Text("${band.label} 초기화", fontSize = 11.sp)
                         }
                     }
-                } else {
-                    val params = Param.sliders.filter { it.group == group }
-                    items(params.size) { index ->
-                        val param = params[index]
-                        SliderRow(param, recipe[param], onParam)
-                    }
-                }
-                if (group == ParamGroup.GEOMETRY) {
-                    item(key = "straighten-reset") {
+                    ParamGroup.GEOMETRY -> {
+                        Param.sliders.filter { it.group == group }.forEach { param ->
+                            SliderRow(param, recipe[param], onParam)
+                        }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(onClick = onAutoStraighten) { Text("자동으로 다시 맞추기", fontSize = 11.sp) }
-                            TextButton(onClick = { onParam(Param.STRAIGHTEN_DEG, 0f) }) {
+                            TextButton(onClick = onAutoStraighten, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                                Text("자동으로 다시 맞추기", fontSize = 11.sp)
+                            }
+                            TextButton(onClick = { onParam(Param.STRAIGHTEN_DEG, 0f) }, contentPadding = PaddingValues(horizontal = 4.dp)) {
                                 Text("수평 0°", fontSize = 11.sp)
                             }
+                        }
+                    }
+                    else -> {
+                        Param.sliders.filter { it.group == group }.forEach { param ->
+                            SliderRow(param, recipe[param], onParam)
                         }
                     }
                 }
@@ -742,16 +840,23 @@ private fun SliderPanel(
 
 @Composable
 private fun SliderRow(param: Param, value: Float, onParam: (Param, Float) -> Unit) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(param.label, fontSize = 12.sp, color = LumenPalette.Text, modifier = Modifier.weight(1f))
-            Text(param.display(value), fontSize = 11.sp, color = LumenPalette.TextDim)
+            Text(
+                param.label,
+                fontSize = 11.sp,
+                color = LumenPalette.Text,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+            )
+            Text(param.display(value), fontSize = 10.sp, color = LumenPalette.TextDim)
         }
+        // 트랙을 얇게: 한 줄 높이를 22dp → 20dp로 줄이고 패딩을 없앴다.
         Slider(
             value = param.fraction(value),
             onValueChange = { onParam(param, param.fromFraction(it)) },
             valueRange = 0f..1f,
-            modifier = Modifier.height(22.dp),
+            modifier = Modifier.fillMaxWidth().height(20.dp),
         )
     }
 }
@@ -765,13 +870,14 @@ private fun LutStrip(
     onIntensity: (Float) -> Unit,
 ) {
     Surface(color = LumenPalette.Panel, modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(vertical = 6.dp)) {
+        // 룩 줄도 사진 자리를 지키게 최소 높이로: 머리글 한 줄 + 칩 한 줄 + 강도 슬라이더.
+        Column(modifier = Modifier.padding(vertical = 3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp)) {
-                Text("필름 룩 57종", fontSize = 12.sp, color = LumenPalette.Accent, modifier = Modifier.weight(1f))
-                Text("강도 ${(intensity * 100).toInt()}%", fontSize = 11.sp, color = LumenPalette.TextDim)
+                Text("필름 룩 57종", fontSize = 11.sp, color = LumenPalette.Accent, modifier = Modifier.weight(1f))
+                Text("강도 ${(intensity * 100).toInt()}%", fontSize = 10.sp, color = LumenPalette.TextDim)
             }
             LazyRow(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
             ) {
@@ -780,6 +886,7 @@ private fun LutStrip(
                         selected = selected < 0,
                         onClick = { onSelect(null) },
                         label = { Text("없음", fontSize = 11.sp) },
+                        modifier = Modifier.height(28.dp),
                     )
                 }
                 items(presets.size) { index ->
@@ -794,6 +901,7 @@ private fun LutStrip(
                                 maxLines = 1,
                             )
                         },
+                        modifier = Modifier.height(28.dp),
                     )
                 }
             }
@@ -801,7 +909,7 @@ private fun LutStrip(
                 value = intensity,
                 onValueChange = onIntensity,
                 valueRange = 0f..1f,
-                modifier = Modifier.padding(horizontal = 12.dp).height(20.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(18.dp),
             )
         }
     }

@@ -75,9 +75,10 @@ uniform float uLutIntensity;
 uniform float uLutEnabled;
 uniform float uCompare;
 
-// 가로 비교: vUv.y = 0 이 사진의 윗줄이므로 그보다 위는 보정 전, 아래는 보정 후를 보여 준다.
-uniform float uSplitEnabled;   // 0 = 끔, 1 = 가로 비교
-uniform float uSplitY;         // 0..1, 사진 위에서부터의 분할 위치
+// 세로 비교: vUv.x = 0 이 사진의 왼쪽 열이므로 그보다 왼쪽은 원본, 오른쪽은 보정 결과를 보여 준다.
+// GL 뷰포트가 사진이 들어앉는 사각형과 정확히 같으므로 vUv는 사진 좌표계와 1:1이다(오버레이와 같은 기준).
+uniform float uSplitEnabled;   // 0 = 끔, 1 = 세로 비교
+uniform float uSplitX;         // 0..1, 사진 왼쪽에서부터의 분할 위치
 
 // ───── 영역 보정: R = 피사체, G = 하늘 (B는 예약) ─────────────────
 uniform sampler2D uMask;
@@ -468,9 +469,9 @@ void main() {
         c += (n - 0.5) * uGrain * 0.18 * max(grainWeight, 0.0);
     }
 
-    // ── 17. 가로 비교 (위 = 보정 전, 아래 = 보정 후) ──────────────────
+    // ── 17. 세로 비교 (왼쪽 = 원본, 오른쪽 = 보정 결과) ────────────────
     if (uSplitEnabled > 0.5) {
-        c = mix(original, c, step(uSplitY, vUv.y));
+        c = mix(original, c, step(uSplitX, vUv.x));
     }
 
     // ── 18. 마스크 미리보기 (확인용, 저장에는 절대 쓰지 않는다) ────────
