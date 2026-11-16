@@ -4,6 +4,7 @@ import android.opengl.GLSurfaceView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
@@ -11,8 +12,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -50,6 +53,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -405,37 +409,73 @@ fun EditorScreen(
 
                 if (!keyboardVisible) {
                     // 하단 도구
+                    //
+                    // 저장·새 사진은 오른쪽 고정 자리에 둔다. v2.2.0에서 [✨ 자동]이 붙은 뒤로는
+                    // 보정 도구 4개 + 두 버튼을 한 줄에 다 넣으면 360dp 폰에서 오른쪽 두 버튼이
+                    // 화면 밖으로 밀려 아예 보이지 않았다(v2.2.3 신고). 이제 앞쪽 도구만 옆으로
+                    // 스크롤되고, 저장·새 사진은 어떤 폭에서도 제자리에 남는다.
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(52.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        // NIMA 기반 자동 보정: 누르면 점수 변화와 바뀐 파라미터가 카드에 뜬다.
-                        Button(
-                            onClick = viewModel::autoEnhance,
-                            enabled = state.loaded && !state.nimaBusy,
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                horizontal = 12.dp,
-                                vertical = 6.dp,
-                            ),
+                        Row(
+                            modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Text(if (state.nimaBusy) "자동…" else "✨ 자동", fontSize = 12.sp)
+                            // NIMA 기반 자동 보정: 누르면 점수 변화와 바뀐 파라미터가 카드에 뜬다.
+                            Button(
+                                onClick = viewModel::autoEnhance,
+                                enabled = state.loaded && !state.nimaBusy,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            ) {
+                                Text(if (state.nimaBusy) "자동…" else "✨ 자동", fontSize = 12.sp)
+                            }
+                            FilledTonalButton(
+                                onClick = { viewModel.autoStraighten() },
+                                enabled = state.loaded,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            ) {
+                                Text("자동 수평·수직", fontSize = 12.sp)
+                            }
+                            FilledTonalButton(
+                                onClick = { showLuts = !showLuts },
+                                enabled = state.loaded,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            ) {
+                                Text("필름 룩", fontSize = 12.sp)
+                            }
+                            FilledTonalButton(
+                                onClick = viewModel::toggleSliders,
+                                enabled = state.loaded,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            ) {
+                                Text("슬라이더", fontSize = 12.sp)
+                            }
+                            // 도구가 더 늘어나도 마지막 버튼이 오른쪽 끝에 붙어 잘리지 않게.
+                            Spacer(Modifier.width(4.dp))
                         }
-                        FilledTonalButton(onClick = { viewModel.autoStraighten() }, enabled = state.loaded) {
-                            Text("자동 수평·수직", fontSize = 12.sp)
+                        Spacer(Modifier.width(8.dp))
+                        // ── 고정 자리: 새 사진 · 저장 ──
+                        OutlinedButton(
+                            onClick = onPickPhoto,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("새 사진", fontSize = 12.sp)
                         }
-                        FilledTonalButton(onClick = { showLuts = !showLuts }, enabled = state.loaded) {
-                            Text("필름 룩", fontSize = 12.sp)
-                        }
-                        FilledTonalButton(onClick = viewModel::toggleSliders, enabled = state.loaded) {
-                            Text("슬라이더", fontSize = 12.sp)
-                        }
-                        Spacer(Modifier.weight(1f))
-                        Button(onClick = viewModel::export, enabled = state.loaded) {
+                        Spacer(Modifier.width(6.dp))
+                        Button(
+                            onClick = viewModel::export,
+                            enabled = state.loaded,
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                        ) {
                             Text("저장", fontSize = 12.sp)
-                        }
-                        IconButton(onClick = onPickPhoto) {
-                            Icon(Icons.Filled.Add, contentDescription = "다른 사진")
                         }
                     }
 

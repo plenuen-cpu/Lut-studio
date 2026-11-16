@@ -1,4 +1,4 @@
-# Lumen 2.2.3 — 자연어 비파괴 사진 보정 (Android)
+# Lumen 2.2.4 — 자연어 비파괴 사진 보정 (Android)
 
 사진 한 장을 고르고 **"조금 더 따뜻하게, 부드럽게"** 처럼 말하면 그대로 보정되는 안드로이드 앱입니다.
 원본 파일은 절대 건드리지 않고, 모든 보정은 `EditRecipe`라는 JSON 상태와 히스토리로만 관리합니다.
@@ -12,7 +12,7 @@
 
 최신 APK: <https://github.com/plenuen-cpu/Lut-studio/releases/latest>
 
-- `Lumen-2.2.3.apk` — release 빌드(디버그 키로 서명, 바로 설치 가능)
+- `Lumen-2.2.4.apk` — release 빌드(디버그 키로 서명, 바로 설치 가능)
 
 온디바이스 인물 분리 모델(16MB)과 NIMA 미적 평가 모델(6.4MB), MediaPipe Vision·TensorFlow Lite
 라이브러리가 APK에 함께 들어 있습니다. 사진은 물론 모델 추론도 네트워크를 쓰지 않습니다.
@@ -160,7 +160,7 @@
 
 ```bash
 # JDK 17, Android SDK 35, Gradle 8.9
-gradle :app:testDebugUnitTest     # 단위 테스트 153개
+gradle :app:testDebugUnitTest     # 단위 테스트 154개
 gradle :app:assembleDebug         # app-debug.apk
 gradle :app:assembleRelease       # app-release.apk (디버그 키로 서명)
 ```
@@ -193,6 +193,8 @@ $ANDROID_HOME/build-tools/35.0.0/aapt2 dump badging app/build/outputs/apk/releas
   값이 0이면 픽셀이 그대로인지, 빨강 채도를 올려도 초록은 그대로인지
 - 마스크 페더링이 경계를 번지게 하고 0/1 극단은 건드리지 않는지, 파란 위쪽 절반만 하늘로 읽는지,
   피사체 자리가 하늘에서 빠지는지, 폴백 피사체가 단색 사진에서 비어 있는지
+- 하단 도구 줄에서 **[저장]·[새 사진]이 스크롤되는 쪽에 들어가지 않는지**(v2.2.3에서 좁은 화면에
+  두 버튼이 화면 밖으로 밀려 사라졌다), 보정 도구 4개는 스크롤 줄 안에 있는지
 
 ## 실기기에서 확인해야 하는 것
 
@@ -209,6 +211,8 @@ $ANDROID_HOME/build-tools/35.0.0/aapt2 dump badging app/build/outputs/apk/releas
    (= 모델이 실제로 돌았는지). 폴백이면 `색·위치 기반 폴백`으로 표시됩니다.
 7. `마스크 보기`를 켜서 인물이 주황, 하늘이 파랑으로 칠해지는지 / "인물만 화사하게"가 인물에만 걸리는지
 8. 8색 HSL에서 빨강 채도를 올렸을 때 빨간 사물만 진해지고 초록·회색은 그대로인지
+9. **하단 줄 오른쪽의 [새 사진]·[저장]이 화면 폭과 상관없이 잘리지 않고 보이는지**(왼쪽 보정 도구는
+   옆으로 밀어서 쓰는지), 버튼 글자가 커진 설정(큰 글씨)에서도 두 버튼이 겹치지 않는지
 
 ## 파일 지도
 
