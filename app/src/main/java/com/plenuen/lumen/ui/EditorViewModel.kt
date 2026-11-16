@@ -1,14 +1,15 @@
 package com.plenuen.lumen.ui
 
 import android.graphics.Bitmap
-import android.graphics.Color
+import com.plenuen.lumen.core.EditNarrator
+import com.plenuen.lumen.core.EditRecipe
 import com.plenuen.lumen.core.Param
 import com.plenuen.lumen.core.RecipeSession
 import com.plenuen.lumen.data.LutLibrary
-import com.plenuen.lumen.image.PhotoStore
-import com.plenuen.lumen.gl.OffscreenExporter
 import com.plenuen.lumen.data.LutPreset
 import com.plenuen.lumen.geom.StraightenEstimator
+import com.plenuen.lumen.gl.OffscreenExporter
+import com.plenuen.lumen.image.PhotoStore
 import com.plenuen.lumen.llm.LlmModel
 import com.plenuen.lumen.llm.LlmModelStore
 import com.plenuen.lumen.llm.LlmModels
@@ -43,25 +44,37 @@ class EditorViewModel(
         val lastRequest: String? = null,
     )
 
+    /** The translucent card above the prompt bar: what the last request actually changed. */
+    data class Note(
+        val text: String,
+        val caption: String = "방금 한 보정",
+        /** Shows a "설정" shortcut because the local model would have understood the sentence. */
+        val suggestDownload: Boolean = false,
+    )
+
     data class UiState(
         val loaded: Boolean = false,
         val preview: Bitmap? = null,
         val photoUri: android.net.Uri? = null,
         val imageWidth: Int = 0,
         val imageHeight: Int = 0,
-        val recipe: com.plenuen.lumen.core.EditRecipe = com.plenuen.lumen.core.EditRecipe.NEUTRAL,
+        val recipe: EditRecipe = EditRecipe.NEUTRAL,
         val canUndo: Boolean = false,
         val canRedo: Boolean = false,
         val compare: Boolean = false,
+        /** Horizontal Before/After split line on the preview (never applied to exports). */
+        val split: Boolean = false,
+        val splitY: Float = 0.5f,
         val showSliders: Boolean = false,
         val busy: String? = null,
         val message: String? = null,
+        val note: Note? = null,
         val chips: List<String> = emptyList(),
         val scene: SceneStats = SceneStats.UNKNOWN,
         val straighten: StraightenEstimator.Result? = null,
         val presets: List<LutPreset> = emptyList(),
         val lutBytes: ByteArray? = null,
-        val lut: com.plenuen.lumen.data.LutPreset? = null,
+        val lut: LutPreset? = null,
         val llm: LlmUi = LlmUi(),
         val historyLabels: List<String> = emptyList(),
     )
@@ -99,11 +112,11 @@ class EditorViewModel(
             val straight = withContext(Dispatchers.Default) { estimateStraight(loaded.bitmap) }
 
             val initial = if (straight.isReliable) {
-                com.plenuen.lumen.core.EditRecipe.NEUTRAL
+                EditRecipe.NEUTRAL
                     .with(Param.STRAIGHTEN_DEG, straight.degrees)
                     .with(Param.AUTO_STRAIGHTEN, 1f)
             } else {
-                com.plenuen.lumen.core.EditRecipe.NEUTRAL.with(Param.AUTO_STRAIGHTEN, 1f)
+                EditRecipe.NEUTRAL.with(Param.AUTO_STRAIGHTEN, 1f)
             }
             session = RecipeSession(initial)
             _state.update {
@@ -117,6 +130,8 @@ class EditorViewModel(
                     canUndo = false,
                     canRedo = false,
                     busy = null,
+                    splitY = 0.5f,
+                    note = null,
                     chips = buildList {
                         if (straight.isReliable) add("자동 수평 ${"%.1f".format(straight.degrees)}°")
                     },
@@ -135,6 +150,8 @@ class EditorViewModel(
 
     fun clearMessage() = _state.update { it.copy(message = null) }
 
+    fun dismissNote() = _state.update { it.copy(note = null) }
+
     // ── 자연어 ────────────────────────────────────────────────────────────
 
     fun submitPrompt(text: String) {
@@ -142,8 +159,10 @@ class EditorViewModel(
         if (trimmed.isEmpty() || !_state.value.loaded) return
         val parsed = NaturalLanguageParser.parse(trimmed)
         val current = _state.value
+        val before = session.current
         var applied = false
-        var summaryParts = mutableListOf<String>()
+        var appliedLutName: String? = null
+        val summaryParts = mutableListOf<String>()
 
         // 1) 대화 제어
         when (parsed.control) {
@@ -229,36 +248,41 @@ class EditorViewModel(
                 session.replace(recipe, "룩 ${preset.display}")
                 decodeLut(preset)
                 applied = true
+                appliedLutName = preset.display
                 summaryParts += preset.display
             }
         }
 
         if (!applied) {
-            // 규칙이 문장을 이해하지 못했을 때만 로컬 LLM에게 묻는다.
-            scope.launch {
-                val understood = llmFallback(trimmed, current)
-                if (!understood) {
-                    _state.update {
-                        it.copy(message = "문장을 이해하지 못했어요. \"따뜻하게 조금\"처럼 말해 보세요.")
-                    }
-                    pushState()
-                    return@launch
-                }
-                _state.update {
-                    it.copy(
-                        message = "로컬 LLM 해석 · ${it.llm.status}",
-                        chips = (it.chips + "로컬 LLM").distinct().takeLast(8),
-                    )
-                }
-                pushState()
-            }
+            // 사전에 없는 표현은 곧바로 로컬 LLM 추론 경로로 넘긴다.
+            scope.launch { interpretWithLlm(trimmed, before) }
             return
         }
 
-        _state.update {
-            it.copy(
-                message = summaryParts.joinToString(" · ").ifBlank { null },
-                chips = (it.chips + summaryParts).distinct().takeLast(8),
+        val after = session.current
+        val sentence = EditNarrator.describe(before, after, appliedLutName)
+        _state.update { state ->
+            val note = when (parsed.control) {
+                // 되돌리기는 새 보정이 아니라서 "방금 한 보정" 카드를 지운다.
+                NaturalLanguageParser.Control.UNDO,
+                NaturalLanguageParser.Control.REDO,
+                -> null
+                NaturalLanguageParser.Control.RESET -> Note(
+                    "모든 보정을 지우고 원본으로 되돌렸어요.",
+                    caption = "초기화",
+                )
+                NaturalLanguageParser.Control.COMPARE -> state.note
+                else -> sentence?.let { text -> Note(text) } ?: state.note
+            }
+            state.copy(
+                // 카드가 같은 내용을 이미 보여 주므로 스낵바는 카드가 없을 때만 띄운다.
+                message = if (note === state.note) {
+                    summaryParts.joinToString(" · ").ifBlank { null }
+                } else {
+                    null
+                },
+                chips = (state.chips + summaryParts).distinct().takeLast(8),
+                note = note,
             )
         }
         pushState()
@@ -267,20 +291,11 @@ class EditorViewModel(
         val leftover = parsed.unmatched.trim()
         if (leftover.length >= 2) {
             scope.launch {
-                val before = session.current
-                if (llmFallback(leftover, _state.value)) {
-                    if (session.current != before) {
-                        _state.update { st ->
-                            st.copy(message = "${st.message ?: ""} · 로컬 LLM: ${st.llm.status}".trim(' ', '·'))
-                        }
-                        pushState()
-                    }
-                }
+                // 룰이 이미 반영한 뒤의 자투리 문장이라, 모델이 없을 때 다운로드 안내로 덮지 않는다.
+                if (interpretWithLlm(leftover, before, notifyMissingModel = false)) pushState()
             }
         }
     }
-
-    private fun recipe(param: Param): Float = session.current[param]
 
     private fun findLut(query: String): LutPreset? {
         val presets = lutLibrary?.presets ?: return null
@@ -290,28 +305,96 @@ class EditorViewModel(
             ?: presets.firstOrNull { it.name.lowercase().contains(needle) }
     }
 
-    private suspend fun llmFallback(text: String, current: UiState): Boolean {
-        if (!current.llm.enabled) return false
-        val model = LlmModels.all.firstOrNull { it.id == current.llm.modelId } ?: LlmModels.default
-        if (!modelStore.isDownloaded(model)) {
+    /**
+     * Sends [text] to the on-device model and applies what it understands. [before] is the recipe
+     * the sentence started from, so the note can describe the whole change, not just the model's
+     * share of it.
+     */
+    private suspend fun interpretWithLlm(
+        text: String,
+        before: EditRecipe,
+        notifyMissingModel: Boolean = true,
+    ): Boolean {
+        val current = _state.value
+        if (!current.llm.enabled) {
             _state.update {
-                it.copy(message = "로컬 LLM 모델이 아직 없습니다. 설정에서 내려받으면 더 복잡한 문장도 읽습니다.")
+                it.copy(
+                    note = Note(
+                        text = "자동 해석이 꺼져 있어 이 표현은 반영하지 못했어요. 설정에서 켜거나 " +
+                            "\"더 따뜻하게\"처럼 익숙한 말로 말해 주세요.",
+                        caption = "로컬 LLM 꺼짐",
+                    ),
+                )
             }
             return false
         }
-        _state.update { it.copy(busy = "로컬 LLM이 문장을 읽는 중…") }
-        val loaded = llm.ensureLoaded(model, modelStore.fileFor(model))
-        if (!loaded) {
-            _state.update { it.copy(busy = null, llm = it.llm.copy(status = llm.lastError ?: "모델을 열 수 없습니다.")) }
+        val model = LlmModels.all.firstOrNull { it.id == current.llm.modelId } ?: LlmModels.default
+        if (!modelStore.isDownloaded(model)) {
+            if (!notifyMissingModel) return false
+            _state.update {
+                it.copy(
+                    note = Note(
+                        text = "사전에 없는 표현이에요. 상단 설정(⚙️)에서 로컬 LLM(${model.sizeMb}MB)을 " +
+                            "내려받으면 자유로운 문장도 추론해서 보정해 드려요!",
+                        caption = "로컬 LLM 안내",
+                        suggestDownload = true,
+                    ),
+                )
+            }
             return false
         }
+
+        _state.update { it.copy(busy = "로컬 LLM이 문장을 읽는 중…") }
+        if (!llm.ensureLoaded(model, modelStore.fileFor(model))) {
+            _state.update {
+                it.copy(
+                    busy = null,
+                    llm = it.llm.copy(status = llm.lastError ?: "모델을 열 수 없습니다."),
+                    note = Note(
+                        text = "로컬 LLM을 열지 못했어요. 설정에서 모델을 다시 내려받아 주세요.",
+                        caption = "로컬 LLM 오류",
+                    ),
+                )
+            }
+            return false
+        }
+
         val names = lutLibrary?.presets?.map { it.display } ?: emptyList()
         val decoded = llm.interpret(text, current.scene, names)
         _state.update { it.copy(busy = null) }
-        if (decoded == null) return false
+        if (decoded == null) {
+            _state.update {
+                it.copy(
+                    note = Note(
+                        text = "이 문장은 아직 해석하지 못했어요. \"저녁 골목처럼 차분하게\" 같이 " +
+                            "조금 더 구체적으로 말해 주시면 반영할게요.",
+                        caption = "해석 실패",
+                    ),
+                )
+            }
+            return false
+        }
+
         session.apply(decoded.label, decoded.delta, 0.85f)
-        decoded.lutHint?.let { hint -> findLut(hint)?.let { decodeLut(it) } }
-        _state.update { it.copy(llm = it.llm.copy(lastRequest = text, status = decoded.summary)) }
+        // 룩 제안은 레시피에도 반영해야 프리뷰와 저장에 실제로 적용된다.
+        val preset = decoded.lutHint?.let { hint -> findLut(hint) }
+        if (preset != null) {
+            session.replace(
+                session.current.with(Param.LUT_INDEX, preset.idx.toFloat()),
+                "룩 ${preset.display}",
+            )
+            decodeLut(preset)
+        }
+        val sentence = EditNarrator.describe(before, session.current, preset?.display)
+        _state.update {
+            it.copy(
+                note = Note(sentence ?: decoded.summary, caption = "로컬 LLM 해석"),
+                message = decoded.summary,
+                chips = (it.chips + "로컬 LLM").distinct().takeLast(8),
+                llm = it.llm.copy(lastRequest = text, status = decoded.summary),
+            )
+        }
+        pushState()
         return true
     }
 
@@ -319,7 +402,12 @@ class EditorViewModel(
 
     fun setParam(param: Param, value: Float) {
         if (!_state.value.loaded) return
+        val before = session.current
         session.replace(session.current.with(param, value), param.label)
+        val sentence = EditNarrator.describe(before, session.current)
+        _state.update { state ->
+            state.copy(note = sentence?.let { Note(it, caption = param.label) } ?: state.note)
+        }
         pushState()
     }
 
@@ -333,6 +421,7 @@ class EditorViewModel(
     fun autoStraighten(announce: Boolean = true) {
         val preview = _state.value.preview ?: return
         scope.launch {
+            val before = session.current
             val result = withContext(Dispatchers.Default) { estimateStraight(preview) }
             if (!result.isReliable) {
                 _state.update {
@@ -347,10 +436,12 @@ class EditorViewModel(
                 "자동 수평·수직",
                 com.plenuen.lumen.core.RecipeDelta.set("수평", Param.STRAIGHTEN_DEG, result.degrees),
             )
+            val sentence = EditNarrator.describe(before, session.current)
             _state.update {
                 it.copy(
                     straighten = result,
                     message = "수평을 ${"%.1f".format(result.degrees)}° 자동으로 맞췄어요.",
+                    note = sentence?.let { text -> Note(text) } ?: it.note,
                 )
             }
             pushState()
@@ -359,6 +450,7 @@ class EditorViewModel(
 
     fun selectLut(preset: LutPreset?) {
         if (!_state.value.loaded) return
+        val before = session.current
         val recipe = if (preset == null) {
             session.current.with(Param.LUT_INDEX, -1f)
         } else {
@@ -366,6 +458,8 @@ class EditorViewModel(
         }
         session.replace(recipe, preset?.display ?: "룩 없음")
         if (preset != null) decodeLut(preset) else _state.update { it.copy(lutBytes = null, lut = null) }
+        val sentence = EditNarrator.describe(before, session.current, preset?.display)
+        _state.update { it.copy(note = sentence?.let { text -> Note(text) } ?: it.note) }
         pushState()
     }
 
@@ -378,22 +472,34 @@ class EditorViewModel(
 
     fun undo() {
         session.undo()
+        _state.update { it.copy(note = null) }
         pushState()
     }
 
     fun redo() {
         session.redo()
+        _state.update { it.copy(note = null) }
         pushState()
     }
 
     fun reset() {
         session.reset()
+        _state.update { it.copy(note = Note("모든 보정을 지우고 원본으로 되돌렸어요.", caption = "초기화")) }
         pushState()
     }
 
     fun setCompare(on: Boolean) = _state.update { it.copy(compare = on) }
 
     fun toggleSliders() = _state.update { it.copy(showSliders = !it.showSliders) }
+
+    // ── 가로 비교 ─────────────────────────────────────────────────────────
+
+    fun toggleSplit() = _state.update { it.copy(split = !it.split) }
+
+    /** Drags the split line; [delta] is a fraction of the photo height (positive = down). */
+    fun nudgeSplit(delta: Float) = _state.update {
+        it.copy(splitY = (it.splitY + delta).coerceIn(0.03f, 0.97f))
+    }
 
     // ── 내보내기 ──────────────────────────────────────────────────────────
 
@@ -408,6 +514,7 @@ class EditorViewModel(
                 _state.update { it.copy(busy = null, message = "원본 사진을 다시 열 수 없습니다.") }
                 return@launch
             }
+            // 저장에는 비교선이 들어가지 않는다: 셰이더는 전체 보정 이미지를 그린다.
             val outcome = withContext(Dispatchers.Default) {
                 OffscreenExporter().render(full.bitmap, current.recipe, current.lutBytes)
             }

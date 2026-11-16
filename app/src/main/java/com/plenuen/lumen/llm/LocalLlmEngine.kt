@@ -76,7 +76,9 @@ class LocalLlmEngine(private val context: Context) {
         lutNames: List<String>,
     ): LlmRecipeDecoder.Decoded? = withContext(Dispatchers.Default) {
         val engine = inference ?: return@withContext null
-        val prompt = LlmRecipeDecoder.buildPrompt(request, lutNames) + sceneHint(stats)
+        // MediaPipe .task 번들이 Qwen 채팅 템플릿을 직접 입힌다. 여기서 <|im_start|>를 또 넣으면
+        // 템플릿이 두 번 적용돼 모델이 JSON 대신 특수 토큰을 토해 낸다.
+        val prompt = LlmRecipeDecoder.buildPrompt(request, lutNames, sceneHint(stats))
         val answer = try {
             engine.generateResponse(prompt)
         } catch (t: Throwable) {
@@ -84,9 +86,14 @@ class LocalLlmEngine(private val context: Context) {
             lastError = t.message ?: t.javaClass.simpleName
             return@withContext null
         }
+        if (answer.isBlank()) {
+            lastError = "모델이 빈 답을 냈습니다."
+            return@withContext null
+        }
         LlmRecipeDecoder.decode(answer)
     }
 
+    /** One line of measured photo state, folded into the prompt before the request. */
     private fun sceneHint(stats: SceneStats): String {
         if (stats.samples == 0) return ""
         val luma = when {
@@ -104,7 +111,7 @@ class LocalLlmEngine(private val context: Context) {
             stats.isCool -> "차갑다"
             else -> "중립"
         }
-        return "\n사진 상태: 밝기 $luma, 채도 $sat, 색온도 $cast."
+        return "밝기 $luma, 채도 $sat, 색온도 $cast."
     }
 
     private fun closeLocked() {

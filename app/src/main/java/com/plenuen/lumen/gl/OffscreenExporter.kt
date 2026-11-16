@@ -127,7 +127,8 @@ class OffscreenExporter {
             GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
             compiled.use()
             compiled.bind(
-                spec = RenderSpec(recipe, width, height, compare = false),
+                // 저장은 항상 전체 보정 이미지다: 비교·가로 분할은 화면에서만 쓰는 표시 상태다.
+                spec = RenderSpec(recipe, width, height, compare = false, splitEnabled = false),
                 sourceTexture = sourceTexture,
                 lutTexture = lutTexture,
                 lutEnabled = lutReady && recipe.lutIndex() >= 0,

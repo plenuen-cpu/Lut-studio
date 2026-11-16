@@ -75,6 +75,10 @@ uniform float uLutIntensity;
 uniform float uLutEnabled;
 uniform float uCompare;
 
+// 가로 비교: vUv.y = 0 이 사진의 윗줄이므로 그보다 위는 보정 전, 아래는 보정 후를 보여 준다.
+uniform float uSplitEnabled;   // 0 = 끔, 1 = 가로 비교
+uniform float uSplitY;         // 0..1, 사진 위에서부터의 분할 위치
+
 float luma(vec3 c) {
     return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
@@ -321,6 +325,11 @@ void main() {
         float n = hash12(floor(vUv * 720.0));
         float grainWeight = 1.0 - abs(luma(c) - 0.5) * 1.1;
         c += (n - 0.5) * uGrain * 0.18 * max(grainWeight, 0.0);
+    }
+
+    // ── 16. 가로 비교 (위 = 보정 전, 아래 = 보정 후) ──────────────────
+    if (uSplitEnabled > 0.5) {
+        c = mix(original, c, step(uSplitY, vUv.y));
     }
 
     fragColor = vec4(clamp(c, 0.0, 1.0), 1.0);

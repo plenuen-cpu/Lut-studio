@@ -12,8 +12,8 @@
 
 최신 APK: <https://github.com/plenuen-cpu/Lut-studio/releases/latest>
 
-- `Lumen-2.0.0.apk` — release 빌드(디버그 키로 서명, 바로 설치 가능)
-- `Lumen-2.0.0-debug.apk` — debug 빌드
+- `Lumen-2.0.1.apk` — release 빌드(디버그 키로 서명, 바로 설치 가능)
+- `Lumen-2.0.1-debug.apk` — debug 빌드
 
 설치 후 갤러리에서 사진을 고르면 됩니다. 서명 키가 빌드마다 같지 않을 수 있으므로,
 이미 설치된 Lumen이 있으면 먼저 삭제하고 설치하세요. (패키지 이름이 `com.plenuen.filmcam`인
@@ -25,6 +25,16 @@
 - 원본은 읽기 전용. `EditRecipe`(파라미터 30여 개) + 히스토리 스택만 바뀝니다.
 - 되돌리기/다시 실행, 초기화, **화면을 길게 눌러 원본과 비교**, 슬라이더 수동 미세조정.
 - 저장은 항상 **원본 해상도의 새 파일** → `Pictures/Lumen/Lumen_yyyyMMdd_HHmmss.jpg`.
+
+### 1-1. 가로선 Before & After 비교
+- 프리뷰 위에 얇은 가로선 + 중앙 핸들 + `BEFORE`/`AFTER` 뱃지를 그리고, 손가락으로 위아래로 끌어 비교합니다.
+- 셰이더 유니폼 `uSplitEnabled`/`uSplitY`: **선 위는 보정 전, 아래는 보정 후** 픽셀(룩·그레인·비네팅 포함).
+- 프리뷰 오른쪽 위 `가로 비교` 칩으로 원터치 토글. **저장 파일에는 선이 들어가지 않습니다.**
+
+### 1-2. 보정 내역 메시지
+- 적용할 때마다 `EditRecipe` 전/후를 비교해 실제로 바뀐 값만 문장으로 만듭니다(`core/EditNarrator.kt`).
+  예: "채도를 18% 올리고, 하이라이트를 20% 낮추고, 색온도를 따뜻하게(25%) 했어요."
+- 입력창 바로 위 반투명 카드에 표시되며, 슬라이더를 직접 움직여도 같은 방식으로 나옵니다.
 
 ### 2. GLES 3.0 실시간 파이프라인 (프리뷰·내보내기 공용)
 한 개의 프래그먼트 셰이더(`gl/ShaderSource.kt`)가 아래를 모두 실제로 계산합니다.
@@ -66,9 +76,16 @@
    - 런타임: MediaPipe **LLM Inference API**(`com.google.mediapipe:tasks-genai`, NDK 빌드 불필요)
    - 배포: APK에 넣지 않고 **첫 사용 시 진행률과 함께 Hugging Face에서 다운로드** → 앱 전용 저장소
    - 디코딩은 greedy(topK=1)로 고정해 같은 문장이 같은 결과를 내도록 했습니다.
+   - 프롬프트는 **평문**입니다. `.task` 번들이 Qwen 채팅 템플릿을 안에서 입히므로 `<|im_start|>`를
+     직접 넣으면 템플릿이 두 번 적용됩니다. 시스템 프롬프트에는 조절 가능한 모든 파라미터 이름,
+     `-1.0~+1.0` 델타 범위, 대표 룩 예시, "사전에 없는 추상적 표현이라도 해석해 **파라미터 2개 이상**과
+     한국어 `summary`를 내라"는 지침이 들어 있습니다.
    - 출력은 `{"label","summary","adjust":{...}}` 형태로 강제하고, 앱은 허용된 키만 받아
-     범위를 다시 클램프합니다. 기하(회전)와 LUT 선택은 모델이 건드릴 수 없습니다.
-   - 모델이 없거나 실패하면 규칙 파서 결과만으로 조용히 동작합니다.
+     범위를 다시 클램프합니다. 기하(회전)와 룩 번호는 모델이 건드릴 수 없습니다(룩은 이름으로만 제안).
+   - 파서는 작은 모델의 지저분한 답을 받아 줍니다: 잘린 JSON의 괄호 닫기, 작은따옴표/따옴표 없는 키,
+     숫자 문자열과 퍼센트, 한국어 파라미터 이름, 중첩 그룹, 새어 나온 특수 토큰 제거.
+   - 모델이 없으면 "사전에 없는 표현이에요. 상단 설정(⚙️)에서 로컬 LLM(547MB)을 내려받으면…" 안내 카드와
+     `설정` 바로가기를 띄웁니다.
 
 ### 5. 57종 3D LUT
 - `assets/luts/presets.json` + `lut_residuals.bin` (206KB, Lorenzo 잔차 zlib)
@@ -78,7 +95,7 @@
 
 ```bash
 # JDK 17, Android SDK 35, Gradle 8.9
-gradle :app:testDebugUnitTest     # 단위 테스트 39개
+gradle :app:testDebugUnitTest     # 단위 테스트 54개
 gradle :app:assembleDebug         # app-debug.apk
 gradle :app:assembleRelease       # app-release.apk (디버그 키로 서명)
 ```
@@ -98,7 +115,9 @@ $ANDROID_HOME/build-tools/35.0.0/aapt2 dump badging app/build/outputs/apk/releas
 - 기울기 추정(사인·부드러운 줄무늬 3°·5°·-4°, 수직선, 평면)과 보정 후 줄이 수평이 되는지
 - 내접 크롭이 네 모서리를 원본 안에 유지하는지
 - LUT 57종 SHA-256이 이전 빌드와 같은지
-- 로컬 LLM JSON 파싱(코드펜스·잡설·미지의 키·범위 초과)
+- 로컬 LLM JSON 파싱(코드펜스·잡설·미지의 키·범위 초과·잘린 JSON·숫자 문자열·한국어 키·중첩 그룹)
+- 보정 내역 문장이 실제 전/후 값에서 나오는지(단일/다중 항목, 룩 이름, 변화 없음)
+- 가로 비교가 프리뷰 표시일 뿐 저장 기본값에는 들어가지 않는지
 
 ## 실기기에서 확인해야 하는 것
 
@@ -116,7 +135,8 @@ $ANDROID_HOME/build-tools/35.0.0/aapt2 dump badging app/build/outputs/apk/releas
 
 ```
 app/src/main/java/com/plenuen/lumen/
-  core/      Param.kt, EditRecipe.kt, RecipeDelta.kt, RecipeSession.kt   (비파괴 상태·히스토리)
+  core/      Param.kt, EditRecipe.kt, RecipeDelta.kt, RecipeSession.kt, EditNarrator.kt
+             (비파괴 상태·히스토리, 보정 내역 문장)
   nl/        IntentCatalog.kt, NaturalLanguageParser.kt, SceneAnalyzer.kt, AestheticPlanner.kt
   geom/      StraightenEstimator.kt, GeometryMath.kt                     (기울기·내접 크롭)
   gl/        ShaderSource.kt, PhotoProgram.kt, PhotoRenderer.kt, OffscreenExporter.kt

@@ -576,11 +576,18 @@ class LlmRecipeDecoderTest {
 
     @Test
     fun clampsOutOfRangeValues() {
-        val decoded = LlmRecipeDecoder.decode("""{"adjust":{"exposure":17}}""")
-        assertNotNull(decoded)
-        val recipe = EditRecipe.NEUTRAL.apply(decoded!!.delta)
-        assertTrue(recipe[Param.EXPOSURE] <= 2f)
-        assertTrue(recipe[Param.EXPOSURE] > 0.5f)
+        // 100 이하의 큰 수는 퍼센트로 읽는다 (모델이 17%, 40% 처럼 답하는 경우)
+        val percent = LlmRecipeDecoder.decode("""{"adjust":{"exposure":17}}""")
+        assertNotNull(percent)
+        val small = EditRecipe.NEUTRAL.apply(percent!!.delta)
+        assertTrue(small[Param.EXPOSURE] > 0f)
+        assertTrue(small[Param.EXPOSURE] < 0.3f)
+
+        // 100을 넘으면 +-1.0으로 자른다. 노출 최대는 +0.70 EV.
+        val huge = LlmRecipeDecoder.decode("""{"adjust":{"exposure":500}}""")
+        assertNotNull(huge)
+        val strong = EditRecipe.NEUTRAL.apply(huge!!.delta)
+        assertEquals(0.7f, strong[Param.EXPOSURE], 0.01f)
     }
 
     @Test

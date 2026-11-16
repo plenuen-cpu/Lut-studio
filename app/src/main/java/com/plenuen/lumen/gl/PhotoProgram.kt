@@ -16,6 +16,10 @@ data class RenderSpec(
     val imageWidth: Int,
     val imageHeight: Int,
     val compare: Boolean = false,
+    /** Preview only: top of the frame shows the untouched source, bottom shows the edit. */
+    val splitEnabled: Boolean = false,
+    /** 0..1 position of the split line measured from the top of the photo. */
+    val splitY: Float = 0.5f,
 )
 
 /**
@@ -137,6 +141,8 @@ class PhotoProgram {
         GLES30.glUniform1f(loc("uLutIntensity"), recipe[Param.LUT_INTENSITY])
         GLES30.glUniform1f(loc("uLutEnabled"), if (lutEnabled) 1f else 0f)
         GLES30.glUniform1f(loc("uCompare"), if (spec.compare) 1f else 0f)
+        GLES30.glUniform1f(loc("uSplitEnabled"), if (spec.splitEnabled) 1f else 0f)
+        GLES30.glUniform1f(loc("uSplitY"), spec.splitY.coerceIn(0f, 1f))
     }
 
     private fun loc(name: String): Int = uniforms[name] ?: -1
@@ -149,6 +155,7 @@ class PhotoProgram {
             "uSplitTone", "uSplitBalance", "uShadowHue", "uHighlightHue", "uSkin", "uMono",
             "uClarity", "uTextureAmt", "uDehaze", "uSharpnessAmt", "uGlow", "uHalation",
             "uGrain", "uVignette", "uFocus", "uLutIntensity", "uLutEnabled", "uCompare",
+            "uSplitEnabled", "uSplitY",
         )
 
         /** Quad as a triangle strip: positions then uv (uv.y = 0 at the top of the image). */

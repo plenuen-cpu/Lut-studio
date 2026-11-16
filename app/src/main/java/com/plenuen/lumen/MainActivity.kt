@@ -1,8 +1,11 @@
 package com.plenuen.lumen
 
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import com.plenuen.lumen.ui.EditorScreen
@@ -24,6 +27,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // targetSdk 35는 edge-to-edge가 강제된다. 창을 시스템 바 아래까지 그리고, 여백은 Compose가
+        // 인셋(navigationBars·ime)으로 잡아야 키보드가 입력창을 가리지 않는다.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+        )
         editor = EditorViewModel(applicationContext, scope)
         setContent {
             LumenTheme {
