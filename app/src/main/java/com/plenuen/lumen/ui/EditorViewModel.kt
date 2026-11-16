@@ -181,6 +181,10 @@ class EditorViewModel(
                 _state.update { it.copy(compare = true) }
                 applied = true
                 summaryParts += "원본 비교"
+                scope.launch {
+                    kotlinx.coroutines.delay(1500)
+                    _state.update { it.copy(compare = false) }
+                }
             }
             null -> {}
         }
