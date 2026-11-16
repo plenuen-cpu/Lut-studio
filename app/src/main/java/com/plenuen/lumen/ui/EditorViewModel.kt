@@ -4,11 +4,13 @@ import android.graphics.Bitmap
 import com.plenuen.lumen.core.EditNarrator
 import com.plenuen.lumen.core.EditRecipe
 import com.plenuen.lumen.core.Param
+import com.plenuen.lumen.core.ParamGroup
 import com.plenuen.lumen.core.RecipeSession
 import com.plenuen.lumen.data.LutLibrary
 import com.plenuen.lumen.data.LutPreset
 import com.plenuen.lumen.geom.StraightenEstimator
 import com.plenuen.lumen.gl.OffscreenExporter
+import com.plenuen.lumen.image.MaskGenerator
 import com.plenuen.lumen.image.PhotoStore
 import com.plenuen.lumen.llm.LlmModel
 import com.plenuen.lumen.llm.LlmModelStore
@@ -66,6 +68,13 @@ class EditorViewModel(
         val split: Boolean = false,
         val splitY: Float = 0.5f,
         val showSliders: Boolean = false,
+        /** On-device segmentation mask: R = subject, G = sky. Null until it is generated. */
+        val mask: Bitmap? = null,
+        val maskReady: Boolean = false,
+        /** How the mask was produced (MediaPipe model or the colour/position fallback). */
+        val maskMethod: String = "",
+        /** Paints the mask over the preview so the user can see what a region request targets. */
+        val maskPreview: Boolean = false,
         val busy: String? = null,
         val message: String? = null,
         val note: Note? = null,
@@ -83,6 +92,7 @@ class EditorViewModel(
     val state: StateFlow<UiState> = _state
 
     private val photoStore = PhotoStore(appContext)
+    private val maskGenerator = MaskGenerator(appContext)
     private val lutLibrary: LutLibrary? = runCatching { LutLibrary(appContext) }.getOrNull()
     private val modelStore = LlmModelStore(appContext)
     private val llm = LocalLlmEngine(appContext)
@@ -132,6 +142,10 @@ class EditorViewModel(
                     busy = null,
                     splitY = 0.5f,
                     note = null,
+                    mask = null,
+                    maskReady = false,
+                    maskMethod = "",
+                    maskPreview = false,
                     chips = buildList {
                         if (straight.isReliable) add("자동 수평 ${"%.1f".format(straight.degrees)}°")
                     },
@@ -144,6 +158,27 @@ class EditorViewModel(
                         null
                     },
                 )
+            }
+            buildMask(loaded.bitmap)
+        }
+    }
+
+    /** Builds the region mask off the UI thread; region sliders stay inert until it lands. */
+    private fun buildMask(bitmap: Bitmap) {
+        scope.launch {
+            val mask = withContext(Dispatchers.Default) {
+                runCatching { maskGenerator.generate(bitmap) }.getOrNull()
+            }
+            _state.update { state ->
+                if (mask == null) {
+                    state.copy(maskReady = false, maskMethod = "마스크를 만들지 못했어요.")
+                } else {
+                    state.copy(
+                        mask = mask.bitmap,
+                        maskReady = true,
+                        maskMethod = maskGenerator.describe(mask.method),
+                    )
+                }
             }
         }
     }
@@ -252,6 +287,29 @@ class EditorViewModel(
             summaryParts += label
         }
 
+        // 3-2) 영역·색상 지시 ("인물만 화사하게", "빨강만 살리고 초록은 차분하게")
+        if (parsed.regionHits.isNotEmpty() || parsed.colorHits.isNotEmpty()) {
+            val wantsRegion = parsed.regionHits.isNotEmpty()
+            for (hit in parsed.regionHits) {
+                session.apply(hit.label, hit.delta, 1f)
+                summaryParts += hit.label
+                applied = true
+            }
+            for (hit in parsed.colorHits) {
+                session.apply(hit.label, hit.delta, 1f)
+                summaryParts += hit.label
+                applied = true
+            }
+            if (wantsRegion && !_state.value.maskReady) {
+                _state.update {
+                    it.copy(
+                        message = it.message
+                            ?: "영역 마스크를 아직 만들지 못했어요. 잠시 뒤 자동으로 다시 시도해 드릴게요.",
+                    )
+                }
+            }
+        }
+
         // 4) LUT 지정
         parsed.lutQuery?.let { query ->
             val preset = findLut(query)
@@ -273,6 +331,7 @@ class EditorViewModel(
             scope.launch { interpretWithLlm(trimmed, before) }
             return
         }
+
 
         val after = session.current
         val sentence = EditNarrator.describe(before, after, appliedLutName)
@@ -511,6 +570,14 @@ class EditorViewModel(
 
     fun toggleSliders() = _state.update { it.copy(showSliders = !it.showSliders) }
 
+    fun toggleMaskPreview() = _state.update { it.copy(maskPreview = !it.maskPreview) }
+
+    fun toggleMask(on: Boolean) {
+        if (!_state.value.loaded) return
+        session.replace(session.current.with(Param.MASK_ON, if (on) 1f else 0f), "영역 마스크")
+        pushState()
+    }
+
     // ── 가로 비교 ─────────────────────────────────────────────────────────
 
     fun toggleSplit() = _state.update { it.copy(split = !it.split) }
@@ -534,8 +601,22 @@ class EditorViewModel(
                 return@launch
             }
             // 저장에는 비교선이 들어가지 않는다: 셰이더는 전체 보정 이미지를 그린다.
+            val recipe = current.recipe
+            // 영역 파라미터를 실제로 썼을 때만 원본 크기 사진에서 마스크를 다시 만든다.
+            val needsMask = recipe[Param.MASK_ON] >= 0.5f && Param.entries.any { param ->
+                param.group == ParamGroup.REGION && param != Param.MASK_ON &&
+                    kotlin.math.abs(recipe[param] - param.default) > 1e-4f
+            }
+            val mask = if (needsMask) {
+                // 프리뷰와 같은 생성기로 원본 크기 사진에서 다시 만든다(같은 방식·같은 페더링).
+                withContext(Dispatchers.Default) {
+                    runCatching { maskGenerator.generate(full.bitmap).bitmap }.getOrNull()
+                }
+            } else {
+                null
+            }
             val outcome = withContext(Dispatchers.Default) {
-                OffscreenExporter().render(full.bitmap, current.recipe, current.lutBytes)
+                OffscreenExporter().render(full.bitmap, recipe, current.lutBytes, mask)
             }
             when (outcome) {
                 is OffscreenExporter.Outcome.Failure -> _state.update {
@@ -604,6 +685,7 @@ class EditorViewModel(
 
     fun release() {
         llm.close()
+        maskGenerator.close()
     }
 
     // ── 내부 ──────────────────────────────────────────────────────────────

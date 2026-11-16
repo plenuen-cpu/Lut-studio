@@ -75,6 +75,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.plenuen.lumen.core.HslBand
 import com.plenuen.lumen.core.Param
 import com.plenuen.lumen.core.ParamGroup
 import com.plenuen.lumen.data.LutPreset
@@ -85,6 +86,7 @@ import com.plenuen.lumen.llm.LlmModels
 private val QUICK_PROMPTS = listOf(
     "부드럽게", "따뜻하게", "영화처럼", "필름처럼", "청량하게", "흑백으로", "예쁘게", "샤하게",
     "꾸안꾸", "포인트 있게", "눈에 띄게", "너무 화려하지는 않게", "수평 맞춰줘",
+    "인물만 화사하게", "배경만 어둡게", "하늘만 파랗게", "빨강만 살리고 초록은 차분하게",
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -219,6 +221,14 @@ fun EditorScreen(
                             label = { Text(if (state.split) "가로 비교 중" else "가로 비교", fontSize = 11.sp) },
                             modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
                         )
+                        if (state.maskReady) {
+                            FilterChip(
+                                selected = state.maskPreview,
+                                onClick = { viewModel.toggleMaskPreview() },
+                                label = { Text("마스크 보기", fontSize = 11.sp) },
+                                modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
+                            )
+                        }
                     }
                     if (state.compare) {
                         Surface(
@@ -260,7 +270,7 @@ fun EditorScreen(
                 }
                 LaunchedEffect(
                     state.recipe, state.compare, state.imageWidth, state.imageHeight,
-                    state.split, state.splitY,
+                    state.split, state.splitY, state.maskReady, state.maskPreview,
                 ) {
                     renderer.updateSpec(
                         RenderSpec(
@@ -270,8 +280,14 @@ fun EditorScreen(
                             compare = state.compare,
                             splitEnabled = state.split,
                             splitY = state.splitY,
+                            maskReady = state.maskReady,
+                            maskPreview = state.maskPreview,
                         ),
                     )
+                    glView?.requestRender()
+                }
+                LaunchedEffect(state.mask) {
+                    renderer.setMask(state.mask)
                     glView?.requestRender()
                 }
                 LaunchedEffect(state.lutBytes) {
@@ -388,8 +404,13 @@ fun EditorScreen(
                     if (state.showSliders) {
                         SliderPanel(
                             recipe = state.recipe,
+                            maskReady = state.maskReady,
+                            maskPreview = state.maskPreview,
+                            maskMethod = state.maskMethod,
                             onParam = viewModel::setParam,
                             onAutoStraighten = viewModel::autoStraighten,
+                            onMaskToggle = viewModel::toggleMask,
+                            onMaskPreview = viewModel::toggleMaskPreview,
                         )
                     }
                 }
@@ -527,9 +548,15 @@ private fun ChangeCard(
 @Composable
 private fun SliderPanel(
     recipe: com.plenuen.lumen.core.EditRecipe,
+    maskReady: Boolean,
+    maskPreview: Boolean,
+    maskMethod: String,
     onParam: (Param, Float) -> Unit,
     onAutoStraighten: () -> Unit,
+    onMaskToggle: (Boolean) -> Unit,
+    onMaskPreview: () -> Unit,
 ) {
+    var bandIndex by remember { mutableStateOf(0) }
     Surface(color = LumenPalette.Panel, modifier = Modifier.fillMaxWidth().height(300.dp)) {
         androidx.compose.foundation.lazy.LazyColumn(
             modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 8.dp),
@@ -544,10 +571,71 @@ private fun SliderPanel(
                         modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
                     )
                 }
-                val params = Param.sliders.filter { it.group == group }
-                items(params.size) { index ->
-                    val param = params[index]
-                    SliderRow(param, recipe[param], onParam)
+                if (group == ParamGroup.REGION) {
+                    item(key = "region-mask") {
+                        Column {
+                            Text(
+                                if (maskReady) "마스크: $maskMethod" else "마스크 준비 중… (인물·하늘 인식)",
+                                fontSize = 10.sp,
+                                color = LumenPalette.TextDim,
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                FilterChip(
+                                    selected = recipe[Param.MASK_ON] >= 0.5f,
+                                    onClick = { onMaskToggle(recipe[Param.MASK_ON] < 0.5f) },
+                                    label = { Text("영역 보정", fontSize = 11.sp) },
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                FilterChip(
+                                    selected = maskPreview,
+                                    onClick = onMaskPreview,
+                                    enabled = maskReady,
+                                    label = { Text("마스크 보기", fontSize = 11.sp) },
+                                )
+                            }
+                        }
+                    }
+                }
+                if (group == ParamGroup.HSL) {
+                    item(key = "hsl-bands") {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(HslBand.entries.size) { index ->
+                                val band = HslBand.entries[index]
+                                FilterChip(
+                                    selected = bandIndex == index,
+                                    onClick = { bandIndex = index },
+                                    label = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(10.dp)
+                                                    .height(10.dp)
+                                                    .background(Color(band.swatch), RoundedCornerShape(5.dp)),
+                                            )
+                                            Spacer(Modifier.width(5.dp))
+                                            Text(band.label, fontSize = 11.sp)
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    val band = HslBand.entries[bandIndex.coerceIn(0, HslBand.entries.size - 1)]
+                    items(band.params.size) { index ->
+                        val param = band.params[index]
+                        SliderRow(param, recipe[param], onParam)
+                    }
+                    item(key = "hsl-reset") {
+                        TextButton(onClick = { band.params.forEach { onParam(it, 0f) } }) {
+                            Text("${band.label} 초기화", fontSize = 11.sp)
+                        }
+                    }
+                } else {
+                    val params = Param.sliders.filter { it.group == group }
+                    items(params.size) { index ->
+                        val param = params[index]
+                        SliderRow(param, recipe[param], onParam)
+                    }
                 }
                 if (group == ParamGroup.GEOMETRY) {
                     item(key = "straighten-reset") {

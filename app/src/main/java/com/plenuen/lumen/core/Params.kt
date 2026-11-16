@@ -7,6 +7,8 @@ enum class ParamGroup(val label: String) {
     COLOR("색감"),
     DETAIL("디테일·질감"),
     FOCUS("강조·마스크"),
+    REGION("영역 보정 (인물·배경·하늘)"),
+    HSL("색상별 HSL (8색)"),
     LUT("필름 룩"),
 }
 
@@ -71,6 +73,48 @@ enum class Param(
     // ---- 강조·마스크 ----
     SUBJECT_FOCUS("subjectFocus", "피사체 강조", ParamGroup.FOCUS, 0f, 1f, 0f, "", 0.01f),
 
+    // ---- 영역 보정: 온디바이스 세그멘테이션 마스크로 인물·배경·하늘을 따로 조절 ----
+    MASK_ON("maskOn", "영역 마스크", ParamGroup.REGION, 0f, 1f, 1f, "", 1f, false, true),
+    SUBJECT_EXPOSURE("subjectExposure", "피사체 밝기", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    SUBJECT_SATURATION("subjectSaturation", "피사체 채도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    SUBJECT_WARMTH("subjectWarmth", "피사체 색온도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    SUBJECT_CLARITY("subjectClarity", "피사체 선명도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    BACKGROUND_EXPOSURE("backgroundExposure", "배경 밝기", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    BACKGROUND_SATURATION("backgroundSaturation", "배경 채도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    BACKGROUND_WARMTH("backgroundWarmth", "배경 색온도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    BACKGROUND_CLARITY("backgroundClarity", "배경 선명도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    BACKGROUND_SOFT("backgroundSoft", "배경 흐림", ParamGroup.REGION, 0f, 1f, 0f, "", 0.01f),
+    SKY_EXPOSURE("skyExposure", "하늘 밝기", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    SKY_SATURATION("skySaturation", "하늘 채도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    SKY_WARMTH("skyWarmth", "하늘 색온도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    SKY_BLUE("skyBlue", "하늘 파랑", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+
+    // ---- 8색 HSL: 색 대역마다 색조·채도·밝기를 따로 ----
+    RED_HUE("redHue", "빨강 색조", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    RED_SAT("redSaturation", "빨강 채도", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    RED_LUM("redLuminance", "빨강 밝기", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    ORANGE_HUE("orangeHue", "주황 색조", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    ORANGE_SAT("orangeSaturation", "주황 채도", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    ORANGE_LUM("orangeLuminance", "주황 밝기", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    YELLOW_HUE("yellowHue", "노랑 색조", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    YELLOW_SAT("yellowSaturation", "노랑 채도", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    YELLOW_LUM("yellowLuminance", "노랑 밝기", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    GREEN_HUE("greenHue", "초록 색조", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    GREEN_SAT("greenSaturation", "초록 채도", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    GREEN_LUM("greenLuminance", "초록 밝기", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    CYAN_HUE("cyanHue", "청록 색조", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    CYAN_SAT("cyanSaturation", "청록 채도", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    CYAN_LUM("cyanLuminance", "청록 밝기", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    BLUE_HUE("blueHue", "파랑 색조", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    BLUE_SAT("blueSaturation", "파랑 채도", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    BLUE_LUM("blueLuminance", "파랑 밝기", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    PURPLE_HUE("purpleHue", "보라 색조", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    PURPLE_SAT("purpleSaturation", "보라 채도", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    PURPLE_LUM("purpleLuminance", "보라 밝기", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    MAGENTA_HUE("magentaHue", "자홍 색조", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    MAGENTA_SAT("magentaSaturation", "자홍 채도", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+    MAGENTA_LUM("magentaLuminance", "자홍 밝기", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),
+
     // ---- 3D LUT ----
     LUT_INDEX("lutIndex", "룩", ParamGroup.LUT, -1f, 56f, -1f, "", 1f),
     LUT_INTENSITY("lutIntensity", "룩 강도", ParamGroup.LUT, 0f, 1f, 0.85f, "", 0.01f);
@@ -105,7 +149,8 @@ enum class Param(
 
         /** Sliders shown in the manual panel, in display order. */
         val sliders: List<Param> = entries.filter {
-            it != LUT_INDEX && it != AUTO_STRAIGHTEN && it != SPLIT_SHADOW_HUE && it != SPLIT_HIGHLIGHT_HUE
+            it != LUT_INDEX && it != AUTO_STRAIGHTEN && it != MASK_ON &&
+                it != SPLIT_SHADOW_HUE && it != SPLIT_HIGHLIGHT_HUE
         }
 
         fun groupOf(param: Param): ParamGroup = param.group

@@ -39,6 +39,8 @@ object EditNarrator {
         for (param in Param.entries) {
             // The auto-straighten flag is a switch for the geometry block, not a visible amount.
             if (param == Param.AUTO_STRAIGHTEN) continue
+            // 영역 마스크 켜고 끄기는 눈에 보이는 양이 아니라 스위치다.
+            if (param == Param.MASK_ON) continue
             // A look change already implies its strength; naming both reads like a machine.
             if (param == Param.LUT_INTENSITY && lutChanged) continue
             val delta = after[param] - before[param]
@@ -124,11 +126,59 @@ object EditNarrator {
             Param.GRAIN -> amount("그레인을", pct, up, "넣고", "넣었어요", "빼고", "뺐어요")
             Param.VIGNETTE -> amount("비네팅을", pct, up, "넣고", "넣었어요", "빼고", "뺐어요")
             Param.SUBJECT_FOCUS -> amount("피사체 강조를", pct, up, "넣고", "넣었어요", "빼고", "뺐어요")
+
+            // ── 영역 (마스크로 나눈 피사체·배경·하늘) ──
+            Param.SUBJECT_EXPOSURE -> amount("인물 밝기를", pct, up, UP_P, UP_PAST, "내리고", "내렸어요")
+            Param.SUBJECT_SATURATION -> amount("인물 채도를", pct, up, UP_P, UP_PAST, DOWN_P, DOWN_PAST)
+            Param.SUBJECT_CLARITY -> amount("인물 선명도를", pct, up, UP_P, UP_PAST, DOWN_P, DOWN_PAST)
+            Param.SUBJECT_WARMTH -> warmthMove("인물 색온도를", up, pct)
+            Param.BACKGROUND_EXPOSURE -> amount("배경 밝기를", pct, up, UP_P, UP_PAST, "내리고", "내렸어요")
+            Param.BACKGROUND_SATURATION -> amount("배경 채도를", pct, up, UP_P, UP_PAST, DOWN_P, DOWN_PAST)
+            Param.BACKGROUND_CLARITY -> amount("배경 선명도를", pct, up, UP_P, UP_PAST, DOWN_P, DOWN_PAST)
+            Param.BACKGROUND_WARMTH -> warmthMove("배경 색온도를", up, pct)
+            Param.BACKGROUND_SOFT -> amount("배경 흐림을", pct, up, "넣고", "넣었어요", "빼고", "뺐어요")
+            Param.SKY_EXPOSURE -> amount("하늘 밝기를", pct, up, UP_P, UP_PAST, "내리고", "내렸어요")
+            Param.SKY_SATURATION -> amount("하늘 채도를", pct, up, UP_P, UP_PAST, DOWN_P, DOWN_PAST)
+            Param.SKY_WARMTH -> warmthMove("하늘 색온도를", up, pct)
+            Param.SKY_BLUE -> Move(
+                "하늘을 " + if (up) "더 파랗게" else "덜 파랗게",
+                "하고",
+                "했어요",
+            )
+
+            // ── 8색 HSL ──
+            Param.RED_HUE, Param.ORANGE_HUE, Param.YELLOW_HUE, Param.GREEN_HUE,
+            Param.CYAN_HUE, Param.BLUE_HUE, Param.PURPLE_HUE, Param.MAGENTA_HUE,
+            Param.RED_SAT, Param.ORANGE_SAT, Param.YELLOW_SAT, Param.GREEN_SAT,
+            Param.CYAN_SAT, Param.BLUE_SAT, Param.PURPLE_SAT, Param.MAGENTA_SAT,
+            Param.RED_LUM, Param.ORANGE_LUM, Param.YELLOW_LUM, Param.GREEN_LUM,
+            Param.CYAN_LUM, Param.BLUE_LUM, Param.PURPLE_LUM, Param.MAGENTA_LUM ->
+                bandMove(param, pct, up)
+
             Param.LUT_INTENSITY -> amount("룩 강도를", pct, up, UP_P, UP_PAST, "내리고", "내렸어요")
-            Param.LUT_INDEX, Param.AUTO_STRAIGHTEN,
+            Param.LUT_INDEX, Param.AUTO_STRAIGHTEN, Param.MASK_ON,
             Param.SPLIT_SHADOW_HUE, Param.SPLIT_HIGHLIGHT_HUE -> null
         }
     }
+
+    /** "빨강 채도를 30% 올리고" — one of the eight colour bands. */
+    private fun bandMove(param: Param, pct: Int, up: Boolean): Move? {
+        val band = HslBand.bandOf(param) ?: return null
+        val subject = when (param) {
+            band.hue -> "${band.label} 색조를"
+            band.saturation -> "${band.label} 채도를"
+            else -> "${band.label} 밝기를"
+        }
+        val present = if (up) UP_P else DOWN_P
+        val past = if (up) UP_PAST else DOWN_PAST
+        return Move("$subject $pct%", present, past)
+    }
+
+    private fun warmthMove(subject: String, up: Boolean, pct: Int): Move = Move(
+        "$subject " + if (up) "따뜻하게($pct%)" else "차갑게($pct%)",
+        "하고",
+        "했어요",
+    )
 
     private fun lutMove(index: Int, lutName: String?): Move = if (index < 0) {
         Move("필름 룩을", "빼고", "뺐어요")

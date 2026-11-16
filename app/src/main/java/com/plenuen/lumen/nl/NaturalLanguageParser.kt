@@ -44,16 +44,21 @@ object NaturalLanguageParser {
         val unmatched: String = "",
         /** Negated descriptions and exclusions, in the order they appear. */
         val restraints: List<RestraintHit> = emptyList(),
+        /** Directives aimed at part of the frame (인물·배경·하늘). */
+        val regionHits: List<RegionColorParser.RegionHit> = emptyList(),
+        /** Directives aimed at one of the eight colour bands. */
+        val colorHits: List<RegionColorParser.ColorHit> = emptyList(),
     ) {
         val matched: Boolean get() = hits.isNotEmpty() || autoStraighten || straightenDeg != null ||
-            lutQuery != null || control != null || restraints.isNotEmpty()
+            lutQuery != null || control != null || restraints.isNotEmpty() ||
+            regionHits.isNotEmpty() || colorHits.isNotEmpty()
 
         /** 0..1 confidence in the instant interpretation (rules are exact by nature). */
         val confidence: Float
             get() = when {
-                hits.size >= 2 -> 0.98f
+                hits.size >= 2 || (hits.size + regionHits.size + colorHits.size) >= 2 -> 0.98f
                 hits.size == 1 && restraints.isNotEmpty() -> 0.97f
-                hits.size == 1 -> 0.95f
+                hits.size == 1 || regionHits.isNotEmpty() || colorHits.isNotEmpty() -> 0.95f
                 restraints.isNotEmpty() -> 0.9f
                 autoStraighten || straightenDeg != null -> 0.9f
                 lutQuery != null -> 0.85f
@@ -109,6 +114,8 @@ object NaturalLanguageParser {
                 if (restraints.isNotEmpty()) {
                     add(restraints.joinToString(", ") { it.restraint.label })
                 }
+                regionHits.forEach { add(it.label) }
+                colorHits.forEach { add(it.label) }
                 if (autoStraighten) add("자동 수평·수직")
                 straightenDeg?.let { add("수평 ${"%.1f".format(it)}°") }
                 lutQuery?.let { add("룩 $it") }
@@ -295,14 +302,18 @@ object NaturalLanguageParser {
             }
         }
 
-        // 3) 말버릇·수식어 — 의도와 부정 판정 전에 걸러 낸다. "그거 아시죠"가 문장을 흐리지 않게.
+        // 3) 영역·색상 지시 ("인물만 화사하게", "빨강만 살리고 초록은 차분하게")
+        //    일반 룩 해석보다 먼저 읽어, 쓰인 낱말을 소비해 같은 요청이 사진 전체에 겹쳐 적용되지 않게 한다.
+        val directed = RegionColorParser.scan(normalized, consumed)
+
+        // 4) 말버릇·수식어 — 의도와 부정 판정 전에 걸러 낸다. "그거 아시죠"가 문장을 흐리지 않게.
         consumeFillers(normalized, consumed)
         consumeDecorations(normalized, consumed)
 
-        // 4) 부정·억제 ("~하지는 않게", "~는 말고", "~은 빼고")
+        // 5) 부정·억제 ("~하지는 않게", "~는 말고", "~은 빼고")
         val restraints = scanRestraints(normalized, consumed)
 
-        // 5) 룩 이름 (포트라, 벨비아, 라이카 …)
+        // 6) 룩 이름 (포트라, 벨비아, 라이카 …)
         var lutQuery: String? = null
         for ((alias, query) in LUT_ALIASES_SORTED) {
             val at = normalized.indexOf(alias)
@@ -313,7 +324,7 @@ object NaturalLanguageParser {
             }
         }
 
-        // 6) 룩 의도
+        // 7) 룩 의도
         val rawHits = mutableListOf<IntentHit>()
         for ((phrase, intent) in IntentCatalog.phraseIndex) {
             var from = 0
@@ -331,7 +342,7 @@ object NaturalLanguageParser {
         val ordered = rawHits.sortedBy { it.position }
             .distinctBy { it.intent.key }
 
-        // 7) "더" / "덜" — 붙은 룩이 없을 때만 대화 제어로 읽는다.
+        // 8) "더" / "덜" — 붙은 룩이 없을 때만 대화 제어로 읽는다.
         if (ordered.isEmpty() && control == null) {
             val moreWord = normalized.startsWith("더") || normalized.contains(" 더 ")
             val lessWord = normalized.startsWith("덜") || normalized.contains(" 덜 ")
@@ -350,6 +361,8 @@ object NaturalLanguageParser {
             normalized = normalized,
             unmatched = leftovers(normalized, consumed),
             restraints = restraints,
+            regionHits = directed.regions,
+            colorHits = directed.colors,
         )
     }
 
@@ -586,6 +599,24 @@ object NaturalLanguageParser {
                 from = at + 1
             }
         }
+    }
+
+    /**
+     * Strength adverb found anywhere in [text], 1 when there is none. Used by the region/colour
+     * scanner, where the adverb may sit on either side of the noun ("인물만 아주 화사하게",
+     * "보라색 살짝").
+     */
+    fun strengthIn(text: String): Float {
+        var best: Float? = null
+        var bestLength = -1
+        for ((word, strength) in MODIFIERS) {
+            if (!text.contains(word)) continue
+            if (word.length > bestLength) {
+                best = strength
+                bestLength = word.length
+            }
+        }
+        return best ?: 1f
     }
 
     private fun modifierBefore(text: String, position: Int): Float {

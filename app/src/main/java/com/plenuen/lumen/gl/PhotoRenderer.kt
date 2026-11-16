@@ -16,7 +16,11 @@ class PhotoRenderer : GLSurfaceView.Renderer {
 
     private val pendingImage = AtomicReference<Bitmap?>(null)
     private val pendingLut = AtomicReference<ByteArray?>(null)
+    private val pendingMask = AtomicReference<MaskUpdate?>(null)
     private val specRef = AtomicReference<RenderSpec?>(null)
+
+    /** Null bitmap means "drop the mask" (a new photo is loading). */
+    private data class MaskUpdate(val bitmap: Bitmap?)
 
     @Volatile
     private var imageGeneration = 0
@@ -27,6 +31,8 @@ class PhotoRenderer : GLSurfaceView.Renderer {
     private var program: PhotoProgram? = null
     private var sourceTexture = 0
     private var lutTexture = 0
+    private var maskTexture = 0
+    private var maskUploaded = false
     private var vertexBuffer = 0
     private var imageWidth = 0
     private var imageHeight = 0
@@ -43,6 +49,10 @@ class PhotoRenderer : GLSurfaceView.Renderer {
         pendingLut.set(lutBytes)
     }
 
+    fun setMask(bitmap: Bitmap?) {
+        pendingMask.set(MaskUpdate(bitmap))
+    }
+
     fun updateSpec(spec: RenderSpec) {
         specRef.set(spec)
     }
@@ -56,10 +66,16 @@ class PhotoRenderer : GLSurfaceView.Renderer {
         }
         program = compiled
 
-        val ids = IntArray(2)
-        GLES30.glGenTextures(2, ids, 0)
+        val ids = IntArray(3)
+        GLES30.glGenTextures(3, ids, 0)
         sourceTexture = ids[0]
         lutTexture = ids[1]
+        maskTexture = ids[2]
+        // 마스크가 없을 때도 세이더가 항상 유효한 텍스처를 보도록 1×1 검사 텍스처를 올린다.
+        PhotoProgram.uploadBitmap(
+            Bitmap.createBitmap(intArrayOf(0), 1, 1, Bitmap.Config.ARGB_8888),
+            maskTexture,
+        )
 
         val buffers = IntArray(1)
         GLES30.glGenBuffers(1, buffers, 0)
@@ -95,6 +111,19 @@ class PhotoRenderer : GLSurfaceView.Renderer {
             PhotoProgram.uploadLut(lut, lutTexture)
             lutUploaded = true
         }
+        pendingMask.getAndSet(null)?.let { update ->
+            val bitmap = update.bitmap
+            if (bitmap == null) {
+                PhotoProgram.uploadBitmap(
+                    Bitmap.createBitmap(intArrayOf(0), 1, 1, Bitmap.Config.ARGB_8888),
+                    maskTexture,
+                )
+                maskUploaded = false
+            } else {
+                PhotoProgram.uploadBitmap(bitmap, maskTexture)
+                maskUploaded = true
+            }
+        }
         if (imageWidth == 0 || imageHeight == 0) return
 
         val spec = specRef.get() ?: RenderSpec(com.plenuen.lumen.core.EditRecipe.NEUTRAL, imageWidth, imageHeight)
@@ -103,10 +132,15 @@ class PhotoRenderer : GLSurfaceView.Renderer {
 
         active.use()
         active.bind(
-            spec = spec.copy(imageWidth = imageWidth, imageHeight = imageHeight),
+            spec = spec.copy(
+                imageWidth = imageWidth,
+                imageHeight = imageHeight,
+                maskReady = spec.maskReady && maskUploaded,
+            ),
             sourceTexture = sourceTexture,
             lutTexture = lutTexture,
             lutEnabled = lutUploaded && spec.recipe.lutIndex() >= 0,
+            maskTexture = maskTexture,
         )
 
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vertexBuffer)

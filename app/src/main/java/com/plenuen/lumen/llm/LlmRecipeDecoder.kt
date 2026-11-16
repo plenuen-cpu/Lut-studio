@@ -264,6 +264,8 @@ object LlmRecipeDecoder {
             6. "~하지 않게", "~하지는 않은", "~는 말고"는 그 방향으로 올리지 말라는 뜻이다. 예: "너무 화려하지는 않게" → saturation을 올리지 않고 낮춘다. "과하지 않게"는 모든 값을 작게 잡는다.
             7. "~하면서도 ~하지 않게"처럼 상반된 요구가 한 문장에 있으면 둘 다 지킨다. 예: "깔끔하면서도 포인트, 너무 화려하지는 않게" → subjectFocus·clarity는 올리고 saturation은 올리지 않는다.
             8. 구어체·신조어는 사진 현장의 말로 읽는다. 샤하게=중간톤+글로우+피부톤, 뽀샤시=하얗고 부드럽게, 꾸안꾸=티 안 나게, 느좋=힘 뺀 필름 무드, 감다살=감성 최대, 힙하게=대비·윤곽 강하게.
+            9. "인물만·피사체만·배경만·하늘만"처럼 영역을 지정하면 그 영역 파라미터만 쓴다(인물=subject*, 배경=background*, 하늘=sky*). 영역을 말하지 않았으면 영역 파라미터를 쓰지 않는다.
+            10. 색 이름(빨강·주황·노랑·초록·청록·파랑·보라·자홍)이 나오면 그 대역의 색조/채도/밝기 파라미터만 쓴다(예: redSaturation, greenSaturation, yellowLuminance). "빼줘·줄여"는 그 색의 채도를 낮추라는 뜻이다.
 
             출력 예시:
             {"label":"차분하게","summary":"채도를 낮추고 대비를 부드럽게 했어요.","adjust":{"saturation":-0.35,"contrast":-0.2,"fade":0.15}}
@@ -272,6 +274,11 @@ object LlmRecipeDecoder {
             "샤하게" → {"label":"샤하게","summary":"중간톤과 글로우를 올려 뽀샤시하게 했어요.","adjust":{"shadows":0.2,"skinToneClean":0.35,"glow":0.2,"texture":-0.2}}
             "꾸안꾸 느낌, 근데 너무 화려하지는 않게" → {"label":"꾸안꾸","summary":"피부톤만 정리하고 채도는 올리지 않았어요.","adjust":{"skinToneClean":0.3,"saturation":-0.1,"colorHarmony":0.15}}
             "느좋하게, 살짝 필름 느낌으로" → {"label":"느좋","summary":"페이드와 그레인으로 담백한 필름 무드를 냈어요.","adjust":{"fade":0.12,"grain":0.1,"saturation":-0.05}}
+
+            영역·색상 예시:
+            "인물만 화사하게" → {"label":"인물 화사","summary":"인물만 밝고 화사하게 했어요.","adjust":{"subjectExposure":0.3,"subjectSaturation":0.15}}
+            "배경만 차분하게, 하늘은 파랗게" → {"label":"영역 보정","summary":"배경은 차분하게, 하늘은 파랗게 했어요.","adjust":{"backgroundSaturation":-0.3,"backgroundExposure":-0.15,"skyBlue":0.45}}
+            "빨강만 살리고 초록은 차분하게" → {"label":"색 핀셋","summary":"빨강은 살리고 초록은 낮췄어요.","adjust":{"redSaturation":0.4,"greenSaturation":-0.35}}
 
             쓸 수 있는 파라미터 키(이름): $keys
             룩을 고르고 싶을 때만 "lut"에 다음 중 하나를 넣는다: $lutSample
@@ -320,6 +327,28 @@ object LlmRecipeDecoder {
             "soft" to Param.CONTRAST,
             "shadowhue" to Param.SPLIT_SHADOW_HUE,
             "highlightHue" to Param.SPLIT_HIGHLIGHT_HUE,
+            // 색 대역을 영어 색 이름 하나로만 말한 경우
+            "red" to Param.RED_SAT,
+            "orange" to Param.ORANGE_SAT,
+            "yellow" to Param.YELLOW_SAT,
+            "green" to Param.GREEN_SAT,
+            "cyan" to Param.CYAN_SAT,
+            "blue" to Param.BLUE_SAT,
+            "purple" to Param.PURPLE_SAT,
+            "magenta" to Param.MAGENTA_SAT,
+            "sky" to Param.SKY_SATURATION,
+            "background" to Param.BACKGROUND_EXPOSURE,
+            "subject" to Param.SUBJECT_FOCUS,
+            // 자연스러운 한국어 키("인물 밝기", "하늘 파랑")도 받아들인다.
+            "인물밝기" to Param.SUBJECT_EXPOSURE,
+            "인물채도" to Param.SUBJECT_SATURATION,
+            "인물선명도" to Param.SUBJECT_CLARITY,
+            "인물색온도" to Param.SUBJECT_WARMTH,
+            "사람밝기" to Param.SUBJECT_EXPOSURE,
+            "피사체" to Param.SUBJECT_EXPOSURE,
+            "하늘" to Param.SKY_BLUE,
+            "하늘파랑" to Param.SKY_BLUE,
+            "배경" to Param.BACKGROUND_EXPOSURE,
         )
         synonyms.forEach { (key, param) -> put(normalizeKey(key), param) }
     }

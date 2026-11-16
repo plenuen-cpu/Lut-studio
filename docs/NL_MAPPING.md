@@ -147,6 +147,45 @@
 | 전문가처럼 | 명료도 0.18, 샤프닝 0.22, 하이라이트 −0.12 | 디테일이 적으면 텍스처↑ |
 | SNS 감성 | 활기 0.22, 노출 0.08, 페이드 0.06, 글로우 0.10, 색온도 0.05 | 색온도 편향 보정 |
 
+## 영역 지시 (마스크로 나눈 피사체·배경·하늘)
+
+문장에 영역 낱말이 있고 그 옆에 효과 낱말이 있을 때만 영역 지시로 읽습니다. "인물 사진"처럼
+장르를 가리키는 말은 기존 룩 그래로 둡니다.
+
+| 문장 | 바뀌는 파라미터 |
+| --- | --- |
+| 인물만 / 피사체만 / 주제만 + 화사하게·밝게 | subjectExposure +0.22, subjectSaturation +0.06 |
+| 피사체만 선명하게·또렷하게 | subjectClarity +0.30 |
+| 인물만 부드럽게 | subjectClarity −0.20 |
+| 인물만 채도 빼/줄여 | subjectSaturation −0.26 |
+| 인물만 따뜻하게 / 차갑게 | subjectWarmth ±0.22 |
+| 배경만 어둡게 | backgroundExposure −0.28 |
+| 배경만 차분하게 | backgroundExposure −0.28, backgroundSaturation −0.30 |
+| 배경만 밝게 | backgroundExposure +0.18 |
+| 배경 채도 빼줘 | backgroundSaturation −0.30 |
+| 배경만 부드럽게·흐리게·보케·아웃포커스 | backgroundSoft +0.70 |
+| 배경만 선명하게 | backgroundClarity +0.25 |
+| 하늘만 파랗게·푸르게 | skyBlue +0.60, skySaturation +0.20 |
+| 하늘만 깊게·진하게 | skySaturation +0.30, skyBlue +0.45, skyExposure −0.12 |
+| 하늘 날아간 거 살려줘 | skyExposure −0.32, skySaturation +0.35 |
+| 하늘이 날아가지 않게 | 영역이 아니라 **제한**(하이라이트·화이트↓) |
+
+## 색 대역 지시 (8색 HSL)
+
+색 이름 옆의 방향어로 채도를 올리거나 내립니다. 기본값은 채도 ±0.36(강도 부사로 배율).
+
+| 문장 | 바뀌는 파라미터 |
+| --- | --- |
+| 빨강만 살리고 / 진하게 | redSaturation +0.36 (진하게 ×1.35) |
+| 초록은 차분하게 / 빼줘 | greenSaturation −0.36 |
+| 단풍 색만 진하게 | redSaturation (단풍 = 빨강) |
+| 초록색 나뭇잎 차분하게 | greenSaturation (나뭇잎 = 초록) |
+| 피부 주황기 빼줘 | orangeSaturation −0.36 (피부 = 주황 대역) |
+| 노란기 빼줘 | yellowSaturation −0.36 |
+| 보라색 살짝 | purpleSaturation +0.20 (살짝 ×0.55) |
+| 하늘 파란색만 깊게 | 하늘로 읽음: skyBlue +0.45, skySaturation +0.28 |
+| 노랗지 않게 / 파래지지 않게 | 색 대역이 아니라 **제한**(색온도·틴트) |
+
 ## 강도 부사
 
 `아주 살짝` 0.25 · `조금/살짝/약간` 0.55–0.60 · `적당히` 0.85 · `진하게` 1.35 · `확/세게` 1.50 ·

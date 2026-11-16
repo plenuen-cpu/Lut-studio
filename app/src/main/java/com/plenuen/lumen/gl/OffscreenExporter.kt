@@ -24,12 +24,17 @@ class OffscreenExporter {
         data class Failure(val message: String) : Outcome
     }
 
-    fun render(source: Bitmap, recipe: EditRecipe, lutBytes: ByteArray?): Outcome {
+    fun render(
+        source: Bitmap,
+        recipe: EditRecipe,
+        lutBytes: ByteArray?,
+        mask: Bitmap? = null,
+    ): Outcome {
         var display: EGLDisplay = EGL14.EGL_NO_DISPLAY
         var context: EGLContext = EGL14.EGL_NO_CONTEXT
         var surface: EGLSurface = EGL14.EGL_NO_SURFACE
         var program: PhotoProgram? = null
-        val textures = IntArray(3)
+        val textures = IntArray(4)
         var framebuffer = 0
 
         try {
@@ -90,11 +95,21 @@ class OffscreenExporter {
             }
             program = compiled
 
-            GLES30.glGenTextures(3, textures, 0)
+            GLES30.glGenTextures(4, textures, 0)
             val sourceTexture = textures[0]
             val targetTexture = textures[1]
             val lutTexture = textures[2]
+            val maskTexture = textures[3]
             PhotoProgram.uploadBitmap(input, sourceTexture)
+            // 마스크는 프리뷰와 같은 생성기(같은 모델·같은 페더링)로 만든 것을 그대로 쓴다.
+            if (mask != null) {
+                PhotoProgram.uploadBitmap(mask, maskTexture)
+            } else {
+                PhotoProgram.uploadBitmap(
+                    Bitmap.createBitmap(intArrayOf(0), 1, 1, Bitmap.Config.ARGB_8888),
+                    maskTexture,
+                )
+            }
 
             val lutReady = lutBytes != null && lutBytes.size == 17 * 17 * 17 * 3
             if (lutReady) PhotoProgram.uploadLut(lutBytes!!, lutTexture)
@@ -128,10 +143,20 @@ class OffscreenExporter {
             compiled.use()
             compiled.bind(
                 // 저장은 항상 전체 보정 이미지다: 비교·가로 분할은 화면에서만 쓰는 표시 상태다.
-                spec = RenderSpec(recipe, width, height, compare = false, splitEnabled = false),
+                spec = RenderSpec(
+                    recipe,
+                    width,
+                    height,
+                    compare = false,
+                    splitEnabled = false,
+                    maskReady = mask != null,
+                    // 저장 파일에는 마스크 확인용 색을 절대 넣지 않는다.
+                    maskPreview = false,
+                ),
                 sourceTexture = sourceTexture,
                 lutTexture = lutTexture,
                 lutEnabled = lutReady && recipe.lutIndex() >= 0,
+                maskTexture = maskTexture,
             )
 
             val vertices = PhotoProgram.vertexBuffer(PhotoProgram.FLIPPED_VERTICES)
@@ -184,7 +209,7 @@ class OffscreenExporter {
         } finally {
             runCatching { program?.release() }
             if (framebuffer != 0) runCatching { GLES30.glDeleteFramebuffers(1, intArrayOf(framebuffer), 0) }
-            if (textures[0] != 0) runCatching { GLES30.glDeleteTextures(3, textures, 0) }
+            if (textures[0] != 0) runCatching { GLES30.glDeleteTextures(4, textures, 0) }
             if (display != EGL14.EGL_NO_DISPLAY) {
                 runCatching { EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT) }
                 if (surface != EGL14.EGL_NO_SURFACE) runCatching { EGL14.eglDestroySurface(display, surface) }

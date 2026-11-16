@@ -1,5 +1,6 @@
 package com.plenuen.lumen.llm
 
+import com.plenuen.lumen.core.HslBand
 import com.plenuen.lumen.core.Param as P
 
 /**
@@ -76,7 +77,22 @@ object LlmScale {
         P.GRAIN to 0.50f,
         P.VIGNETTE to 0.50f,
         P.SUBJECT_FOCUS to 0.60f,
-    )
+
+        // 영역(마스크로 나눈 피사체·배경·하늘) — 레시피 파라미터는 -1..1이라 한 번에 크게 움직인다.
+        P.SUBJECT_EXPOSURE to 0.60f,
+        P.SUBJECT_SATURATION to 0.50f,
+        P.SUBJECT_WARMTH to 0.50f,
+        P.SUBJECT_CLARITY to 0.50f,
+        P.BACKGROUND_EXPOSURE to 0.60f,
+        P.BACKGROUND_SATURATION to 0.50f,
+        P.BACKGROUND_WARMTH to 0.50f,
+        P.BACKGROUND_CLARITY to 0.50f,
+        P.BACKGROUND_SOFT to 0.70f,
+        P.SKY_EXPOSURE to 0.50f,
+        P.SKY_SATURATION to 0.50f,
+        P.SKY_WARMTH to 0.40f,
+        P.SKY_BLUE to 0.60f,
+    ) + HslBand.entries.flatMap { it.params }.associateWith { 0.50f }
 
     /** Params the model may move; geometry and LUT selection stay under explicit control. */
     val allowed: List<P> = scale.keys.toList()

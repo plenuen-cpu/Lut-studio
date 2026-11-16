@@ -79,6 +79,28 @@ uniform float uCompare;
 uniform float uSplitEnabled;   // 0 = 끔, 1 = 가로 비교
 uniform float uSplitY;         // 0..1, 사진 위에서부터의 분할 위치
 
+// ───── 영역 보정: R = 피사체, G = 하늘 (B는 예약) ─────────────────
+uniform sampler2D uMask;
+uniform float uMaskOn;        // 0 = 영역 보정 끔, 1 = 켬
+uniform float uMaskPreview;   // 1 = 마스크를 색으로 보여 준다
+uniform float uSubExposure;   // 피사체
+uniform float uSubSaturation;
+uniform float uSubWarmth;
+uniform float uSubClarity;
+uniform float uBkgExposure;   // 배경
+uniform float uBkgSaturation;
+uniform float uBkgWarmth;
+uniform float uBkgClarity;
+uniform float uBkgSoft;
+uniform float uSkyExposure;   // 하늘
+uniform float uSkySaturation;
+uniform float uSkyWarmth;
+uniform float uSkyBlue;
+
+// ───── 8색 HSL: vec3(색조, 채도, 밝기) × 8 대역 ─────────────────
+uniform float uHslActive;     // 0 = 8색 손대지 않음
+uniform vec3 uBandHSL[8];
+
 float luma(vec3 c) {
     return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
@@ -115,6 +137,48 @@ vec3 hueColor(float hue) {
     return hsv2rgb(vec3(fract(hue), 1.0, 1.0));
 }
 
+// ── HSL (8색 대역용). RGB↔HSL은 Kotlin의 HslBands와 같은 식이다. ──
+vec3 rgb2hsl(vec3 c) {
+    float maxc = max(max(c.r, c.g), c.b);
+    float minc = min(min(c.r, c.g), c.b);
+    float l = (maxc + minc) * 0.5;
+    float d = maxc - minc;
+    if (d <= 1.0e-6) return vec3(0.0, 0.0, l);
+    float s = l > 0.5 ? d / max(2.0 - maxc - minc, 1.0e-6) : d / max(maxc + minc, 1.0e-6);
+    float h;
+    if (maxc == c.r) {
+        h = (c.g - c.b) / d + (c.g < c.b ? 6.0 : 0.0);
+    } else if (maxc == c.g) {
+        h = (c.b - c.r) / d + 2.0;
+    } else {
+        h = (c.r - c.g) / d + 4.0;
+    }
+    return vec3(fract(h / 6.0), clamp(s, 0.0, 1.0), l);
+}
+
+float hue2rgb(float p, float q, float t) {
+    float v = t;
+    if (v < 0.0) v += 1.0;
+    if (v > 1.0) v -= 1.0;
+    if (v < 1.0 / 6.0) return p + (q - p) * 6.0 * v;
+    if (v < 0.5) return q;
+    if (v < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - v) * 6.0;
+    return p;
+}
+
+vec3 hsl2rgb(vec3 hsl) {
+    if (hsl.y <= 1.0e-6) return vec3(hsl.z);
+    float q = hsl.z < 0.5 ? hsl.z * (1.0 + hsl.y) : hsl.z + hsl.y - hsl.z * hsl.y;
+    float p = 2.0 * hsl.z - q;
+    return vec3(
+        hue2rgb(p, q, hsl.x + 1.0 / 3.0),
+        hue2rgb(p, q, hsl.x),
+        hue2rgb(p, q, hsl.x - 1.0 / 3.0)
+    );
+}
+
+const float BAND_CENTERS[8] = float[8](0.0, 30.0, 60.0, 120.0, 180.0, 240.0, 285.0, 330.0);
+
 float hash12(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031);
     p3 += dot(p3, p3.yzx + 33.33);
@@ -126,6 +190,14 @@ float hueDelta(float a, float b) {
     if (d > 0.5) d -= 1.0;
     if (d < -0.5) d += 1.0;
     return d;
+}
+
+// 코사인 창: 대역 중심에서 1, 이웃 중심에서 0. 이웃끼리 보완이라 경계가 끊기지 않는다.
+float bandWeight(float hueDeg, float center, float prevGap, float nextGap) {
+    float d = hueDelta(center / 360.0, hueDeg / 360.0) * 360.0;
+    float gap = d < 0.0 ? prevGap : nextGap;
+    if (gap <= 1.0e-3 || abs(d) >= gap) return 0.0;
+    return 0.5 * (1.0 + cos(3.14159265 * abs(d) / gap));
 }
 
 float nearestAnchor(float h, out float distanceOut) {
@@ -312,7 +384,76 @@ void main() {
         c = mix(c, lutColor, uLutIntensity);
     }
 
-    // ── 14. 비네팅 ───────────────────────────────────────────────────
+    // ── 13.5 8색 HSL 핀셋 ───────────────────────────────────────────
+    //   대역마다 색조 ±30°, 채도 배율, 밝기 이동. 회색은 건드리지 않는다.
+    if (uHslActive > 0.5) {
+        vec3 hsl = rgb2hsl(clamp(c, 0.0, 1.0));
+        float hueDeg = hsl.x * 360.0;
+        float grey = smoothstep(0.03, 0.16, hsl.y);
+        float dh = 0.0;
+        float ds = 0.0;
+        float dl = 0.0;
+        for (int i = 0; i < 8; i++) {
+            float center = BAND_CENTERS[i];
+            float prevCenter = BAND_CENTERS[(i + 7) % 8];
+            float nextCenter = BAND_CENTERS[(i + 1) % 8];
+            float prevGap = fract((center - prevCenter) / 360.0) * 360.0;
+            float nextGap = fract((nextCenter - center) / 360.0) * 360.0;
+            float w = bandWeight(hueDeg, center, prevGap, nextGap);
+            if (w <= 0.0) continue;
+            vec3 band = uBandHSL[i];
+            dh += w * band.x;
+            ds += w * band.y;
+            dl += w * band.z;
+        }
+        if (abs(dh) + abs(ds) + abs(dl) > 0.001) {
+            hsl.x = fract(hsl.x + dh * (30.0 / 360.0) * grey);
+            hsl.y = clamp(hsl.y * (1.0 + ds * 0.85 * grey), 0.0, 1.0);
+            float mid = 1.0 - abs(2.0 * hsl.z - 1.0) * 0.5;
+            hsl.z = clamp(hsl.z + dl * 0.16 * grey * mid, 0.0, 1.0);
+            c = hsl2rgb(hsl);
+        }
+    }
+
+    // ── 14. 영역별 보정 (피사체 · 배경 · 하늘) ─────────────────────────
+    if (uMaskOn > 0.5) {
+        vec3 maskSample = texture(uMask, uv).rgb;
+        float mSub = clamp(maskSample.r, 0.0, 1.0);
+        float mSky = clamp(maskSample.g, 0.0, 1.0) * (1.0 - mSub);
+        float mBkg = clamp(1.0 - mSub - mSky, 0.0, 1.0);
+
+        float ev = uSubExposure * mSub + uBkgExposure * mBkg + uSkyExposure * mSky;
+        if (abs(ev) > 0.001) {
+            c = linearToSrgb(srgbToLinear(clamp(c, 0.0, 1.0)) * exp2(ev * 0.9));
+        }
+        float warm = uSubWarmth * mSub + uBkgWarmth * mBkg + uSkyWarmth * mSky;
+        if (abs(warm) > 0.001) {
+            c.r *= 1.0 + warm * 0.20;
+            c.b *= 1.0 - warm * 0.20;
+        }
+        float satAmt = uSubSaturation * mSub + uBkgSaturation * mBkg + uSkySaturation * mSky;
+        if (abs(satAmt) > 0.001) {
+            c = mix(vec3(luma(c)), c, 1.0 + satAmt);
+        }
+        float clarity = uSubClarity * mSub + uBkgClarity * mBkg;
+        if (abs(clarity) > 0.001) {
+            c += (original - mid) * clarity * 0.85;
+            c += (original - fine) * max(clarity, 0.0) * 0.45;
+        }
+        if (uBkgSoft > 0.001) {
+            // 배경 디테일을 덜어 내 초점이 피사체에 남게 한다.
+            c -= (original - wide) * uBkgSoft * 1.35 * mBkg;
+        }
+        if (abs(uSkyBlue) > 0.001) {
+            vec3 hsvSky = rgb2hsv(clamp(c, 0.0, 1.0));
+            float pull = clamp(uSkyBlue, 0.0, 1.0) * 0.75;
+            hsvSky.x = fract(hsvSky.x + hueDelta(hsvSky.x, 0.595) * pull);
+            hsvSky.y = clamp(hsvSky.y * (1.0 + max(uSkyBlue, 0.0) * 0.45), 0.0, 1.0);
+            c = mix(c, hsv2rgb(hsvSky), mSky);
+        }
+    }
+
+    // ── 15. 비네팅 ───────────────────────────────────────────────────
     if (abs(uVignette) > 0.001) {
         vec2 vd = (vUv - 0.5) * vec2(uAspect, 1.0);
         float vdist = length(vd) / max(uAspect, 1.0) * 2.0;
@@ -327,9 +468,20 @@ void main() {
         c += (n - 0.5) * uGrain * 0.18 * max(grainWeight, 0.0);
     }
 
-    // ── 16. 가로 비교 (위 = 보정 전, 아래 = 보정 후) ──────────────────
+    // ── 17. 가로 비교 (위 = 보정 전, 아래 = 보정 후) ──────────────────
     if (uSplitEnabled > 0.5) {
         c = mix(original, c, step(uSplitY, vUv.y));
+    }
+
+    // ── 18. 마스크 미리보기 (확인용, 저장에는 절대 쓰지 않는다) ────────
+    if (uMaskOn > 0.5 && uMaskPreview > 0.5) {
+        vec3 maskSample = texture(uMask, uv).rgb;
+        float mSub = clamp(maskSample.r, 0.0, 1.0);
+        float mSky = clamp(maskSample.g, 0.0, 1.0) * (1.0 - mSub);
+        vec3 tint = mix(vec3(0.10, 0.10, 0.12), vec3(1.0, 0.62, 0.10), mSub);
+        tint = mix(tint, vec3(0.15, 0.55, 1.0), mSky);
+        float cover = clamp(mSub + mSky + 0.32, 0.0, 1.0);
+        c = mix(c, tint, cover * 0.55);
     }
 
     fragColor = vec4(clamp(c, 0.0, 1.0), 1.0);

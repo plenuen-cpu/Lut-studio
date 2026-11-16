@@ -12,8 +12,8 @@ android {
         applicationId = "com.plenuen.lumen"
         minSdk = 29
         targetSdk = 35
-        versionCode = 202
-        versionName = "2.0.2"
+        versionCode = 210
+        versionName = "2.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // 대상 단말은 arm64 안드로이드 폰이다. 32비트·x86 네이티브 라이브러리를 빼서 APK를 절반으로 줄인다.
         ndk { abiFilters += "arm64-v8a" }
@@ -75,6 +75,8 @@ dependencies {
 
     // 온디바이스 경량 LLM (LLM Inference API). 네이티브 라이브러리가 AAR에 들어 있어 NDK가 필요 없다.
     implementation("com.google.mediapipe:tasks-genai:0.10.24")
+    // 온디바이스 세그멘테이션(인물·피사체 마스크). 모델 파일은 assets/models에 번들한다.
+    implementation("com.google.mediapipe:tasks-vision:0.10.21")
 
     testImplementation("junit:junit:4.13.2")
 }

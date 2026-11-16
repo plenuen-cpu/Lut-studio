@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.opengl.GLES30
 import android.opengl.GLUtils
 import com.plenuen.lumen.core.EditRecipe
+import com.plenuen.lumen.core.HslBand
 import com.plenuen.lumen.core.Param
 import com.plenuen.lumen.geom.GeometryMath
 import java.nio.ByteBuffer
@@ -20,6 +21,10 @@ data class RenderSpec(
     val splitEnabled: Boolean = false,
     /** 0..1 position of the split line measured from the top of the photo. */
     val splitY: Float = 0.5f,
+    /** True when a segmentation mask texture is bound (R = subject, G = sky). */
+    val maskReady: Boolean = false,
+    /** Preview only: paint the mask over the photo so the user can see what is targeted. */
+    val maskPreview: Boolean = false,
 )
 
 /**
@@ -85,7 +90,13 @@ class PhotoProgram {
     }
 
     /** Binds every recipe value; the geometry block mirrors [GeometryMath]. */
-    fun bind(spec: RenderSpec, sourceTexture: Int, lutTexture: Int, lutEnabled: Boolean) {
+    fun bind(
+        spec: RenderSpec,
+        sourceTexture: Int,
+        lutTexture: Int,
+        lutEnabled: Boolean,
+        maskTexture: Int = 0,
+    ) {
         val recipe = spec.recipe
         val width = spec.imageWidth.coerceAtLeast(1)
         val height = spec.imageHeight.coerceAtLeast(1)
@@ -143,6 +154,48 @@ class PhotoProgram {
         GLES30.glUniform1f(loc("uCompare"), if (spec.compare) 1f else 0f)
         GLES30.glUniform1f(loc("uSplitEnabled"), if (spec.splitEnabled) 1f else 0f)
         GLES30.glUniform1f(loc("uSplitY"), spec.splitY.coerceIn(0f, 1f))
+
+        // ── 영역 마스크 (텍스처 단위 2) ─────────────────────────────
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE2)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, maskTexture)
+        GLES30.glUniform1i(loc("uMask"), 2)
+        GLES30.glUniform1f(loc("uMaskOn"), if (spec.maskReady && recipe[Param.MASK_ON] >= 0.5f) 1f else 0f)
+        GLES30.glUniform1f(loc("uMaskPreview"), if (spec.maskPreview) 1f else 0f)
+        GLES30.glUniform1f(loc("uSubExposure"), recipe[Param.SUBJECT_EXPOSURE])
+        GLES30.glUniform1f(loc("uSubSaturation"), recipe[Param.SUBJECT_SATURATION])
+        GLES30.glUniform1f(loc("uSubWarmth"), recipe[Param.SUBJECT_WARMTH])
+        GLES30.glUniform1f(loc("uSubClarity"), recipe[Param.SUBJECT_CLARITY])
+        GLES30.glUniform1f(loc("uBkgExposure"), recipe[Param.BACKGROUND_EXPOSURE])
+        GLES30.glUniform1f(loc("uBkgSaturation"), recipe[Param.BACKGROUND_SATURATION])
+        GLES30.glUniform1f(loc("uBkgWarmth"), recipe[Param.BACKGROUND_WARMTH])
+        GLES30.glUniform1f(loc("uBkgClarity"), recipe[Param.BACKGROUND_CLARITY])
+        GLES30.glUniform1f(loc("uBkgSoft"), recipe[Param.BACKGROUND_SOFT])
+        GLES30.glUniform1f(loc("uSkyExposure"), recipe[Param.SKY_EXPOSURE])
+        GLES30.glUniform1f(loc("uSkySaturation"), recipe[Param.SKY_SATURATION])
+        GLES30.glUniform1f(loc("uSkyWarmth"), recipe[Param.SKY_WARMTH])
+        GLES30.glUniform1f(loc("uSkyBlue"), recipe[Param.SKY_BLUE])
+
+        // ── 8색 HSL: vec3(색조, 채도, 밝기) × 8 ──────────────────
+        val bands = FloatArray(HslBand.entries.size * 3)
+        var active = false
+        HslBand.entries.forEachIndexed { index, band ->
+            val hue = recipe[band.hue]
+            val sat = recipe[band.saturation]
+            val lum = recipe[band.luminance]
+            bands[index * 3] = hue
+            bands[index * 3 + 1] = sat
+            bands[index * 3 + 2] = lum
+            if (hue != 0f || sat != 0f || lum != 0f) active = true
+        }
+        GLES30.glUniform1f(loc("uHslActive"), if (active) 1f else 0f)
+        val bandBuffer = ByteBuffer.allocateDirect(bands.size * 4)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+            .apply {
+                put(bands)
+                position(0)
+            }
+        GLES30.glUniform3fv(loc("uBandHSL[0]"), HslBand.entries.size, bandBuffer)
     }
 
     private fun loc(name: String): Int = uniforms[name] ?: -1
@@ -155,7 +208,11 @@ class PhotoProgram {
             "uSplitTone", "uSplitBalance", "uShadowHue", "uHighlightHue", "uSkin", "uMono",
             "uClarity", "uTextureAmt", "uDehaze", "uSharpnessAmt", "uGlow", "uHalation",
             "uGrain", "uVignette", "uFocus", "uLutIntensity", "uLutEnabled", "uCompare",
-            "uSplitEnabled", "uSplitY",
+            "uSplitEnabled", "uSplitY", "uMask", "uMaskOn", "uMaskPreview",
+            "uSubExposure", "uSubSaturation", "uSubWarmth", "uSubClarity",
+            "uBkgExposure", "uBkgSaturation", "uBkgWarmth", "uBkgClarity", "uBkgSoft",
+            "uSkyExposure", "uSkySaturation", "uSkyWarmth", "uSkyBlue",
+            "uHslActive", "uBandHSL[0]",
         )
 
         /** Quad as a triangle strip: positions then uv (uv.y = 0 at the top of the image). */
