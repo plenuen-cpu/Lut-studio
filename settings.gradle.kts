@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "FilmCam"
+rootProject.name = "Lumen"
 include(":app")

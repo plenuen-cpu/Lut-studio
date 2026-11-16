@@ -1,4 +1,4 @@
-name: FilmCam APK
+name: Lumen APK
 
 on:
   push:
@@ -9,13 +9,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: filmcam-${{ github.ref }}
+  group: lumen-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   android:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -33,33 +33,38 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Unit tests (LUT decode + 57 preset mapping)
+      - name: Unit tests (자연어 17종 · 기울기 추정 · LUT 무결성 · LLM JSON)
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
 
-      - name: Assemble debug APK
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Assemble debug and release APKs
+        run: gradle --no-daemon --stacktrace :app:assembleDebug :app:assembleRelease
 
-      - name: Verify APK
+      - name: Verify APKs
         run: |
           mkdir -p verification
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose \
-            app/build/outputs/apk/debug/app-debug.apk | tee verification/signature.txt
+            app/build/outputs/apk/release/app-release.apk | tee verification/signature-release.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose \
+            app/build/outputs/apk/debug/app-debug.apk | tee verification/signature-debug.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging \
-            app/build/outputs/apk/debug/app-debug.apk | tee verification/badging.txt
-          cp app/build/outputs/apk/debug/app-debug.apk FilmCam-debug.apk
-          ls -l FilmCam-debug.apk
+            app/build/outputs/apk/release/app-release.apk | tee verification/badging.txt
+          cp app/build/outputs/apk/release/app-release.apk Lumen-2.0.0.apk
+          cp app/build/outputs/apk/debug/app-debug.apk Lumen-2.0.0-debug.apk
+          ls -l Lumen-*.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FilmCam-Android
-          path: FilmCam-debug.apk
+          name: Lumen-Android
+          path: |
+            Lumen-2.0.0.apk
+            Lumen-2.0.0-debug.apk
           if-no-files-found: error
           compression-level: 0
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: FilmCam-verification
+          name: Lumen-verification
           path: |
             verification/
             app/build/reports/tests/
@@ -75,13 +80,15 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: FilmCam-Android
+          name: Lumen-Android
           path: release
 
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
+          tag_name: v2.0.${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: FilmCam 1.0 · build ${{ github.run_number }}
+          name: Lumen 2.0 · build ${{ github.run_number }}
           body_path: docs/RELEASE_NOTES.md
-          files: release/FilmCam-debug.apk
+          files: |
+            release/Lumen-2.0.0.apk
+            release/Lumen-2.0.0-debug.apk

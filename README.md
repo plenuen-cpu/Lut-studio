@@ -1,88 +1,126 @@
-# FilmCam
+# Lumen 2.0 — 자연어 비파괴 사진 보정 (Android)
 
-Ricoh GR 커스텀 펌웨어(GRLife)의 스타일을 따른 **실시간 LUT 필름 카메라** 안드로이드 앱입니다.
-Tonefinder 2.0.1에 들어 있는 3D LUT 중 필름 46종 + 카메라 룩 11종, 총 **57종**을 그대로 옮겨
-뷰파인더에 30/60fps로 입히고, 촬영한 사진도 같은 색감으로 저장합니다.
+사진 한 장을 고르고 **"조금 더 따뜻하게, 부드럽게"** 처럼 말하면 그대로 보정되는 안드로이드 앱입니다.
+원본 파일은 절대 건드리지 않고, 모든 보정은 `EditRecipe`라는 JSON 상태와 히스토리로만 관리합니다.
+프리뷰와 원본 해상도 저장이 **같은 GLES 3.0 셰이더**를 쓰기 때문에 화면에서 본 그대로 파일이 나옵니다.
 
-## 룩 57종
+- 이전 저장소의 `FilmCam`(Lut-studio) 코드를 대체한 2.0 버전입니다.
+- 화면에서 쓰던 **필름·카메라 3D LUT 57종**(Kodak 24, Fujifilm 14, Agfa 7, Ilford 1, Leica 6, Ricoh GR 5)은
+  그대로 추출해 새 앱에 통합했습니다. LUT 바이트는 이전 빌드와 SHA-256 단위로 동일합니다(테스트로 고정).
 
-| 브랜드 | 수 | 예 |
-| --- | --- | --- |
-| Kodak | 24 | Ektar 100, Portra 400, Gold 200, Tri-X 400, T-Max 3200 |
-| Fujifilm | 14 | Pro 400H, Velvia 50, Superia 400, Reala 100, FP-100c |
-| Agfa | 7 | Optima 100 II, Ultra 50, Vista 400 |
-| Ilford | 1 | HP5 Plus 400 |
-| Leica | 6 | Leica Authentic, Vibrant, Classic Brass, Contemporary, Monochrom |
-| Ricoh GR | 5 | GR Positive / Negative / Bleach Bypass / Cross Process / Hi-Contrast B&W |
-
-VSCO 216종과 Honor·Xiaomi·Vivo·OnePlus·Huawei&Nothing 28종은 이 앱에서 제외했습니다.
-
-## 화면과 기능
-
-- **실시간 뷰파인더**: CameraX 프리뷰를 GLES3로 받아 17×17×17 3D 텍스처 LUT을 셰이더에서
-  트라이리니어 보간으로 적용 (Tonefinder의 CPU 연산과 같은 수식).
-- **Films in use 필름스트립**: 상·하단 퍼포레이션(구멍)이 있는 어두운 필름스트립, 선택된 슬롯에
-  노란 포커스 테두리, 아래에 `1  Kodak Ektachrome E100G`처럼 번호+이름 표시.
-  - 필름(Kodak·Fujifilm·Agfa·Ilford)은 캐니스터 아트 위에 필름 코드(E100, G200, P400, 400H…)를
-    세로로 인쇄 — 코닥 노랑/빨강, 포트라 파스텔, 후지 그린, 아그파 레드, 일포드 흑백.
-  - Leica·Ricoh GR은 브랜드 배지(라이카 레드닷, GR 로고)로 표시.
-- **브랜드 필터 칩**: All / Kodak / Fujifilm / Agfa / Ilford / Leica / Ricoh GR.
-- **LUT 강도 슬라이더** 0~100% (원본과 LUT 결과를 mix).
-- **전/후면 카메라 전환**, **비율 3:2·4:3·16:9·1:1**.
-- **저장**: `Pictures/FilmCam` (MediaStore) 로 JPEG 저장, 최근 사진 썸네일 → 전체화면 보기.
-- 촬영 후 "현상 중…" 처리 동안 LUT 적용 + 크롭 + 회전 보정을 백그라운드에서 수행.
-
-## LUT 데이터
-
-`app/src/main/assets/luts/`
-
-- `presets.json` — 57종 메타데이터(브랜드, 코드, 표시 이름, 캐니스터 색, 슬롯 번호)
-- `lut_residuals.bin` — Tonefinder의 `LUT_LORENZO_B64`(base64 → zlib → Lorenzo 잔차)에서
-  0~56번 LUT만 잘라 다시 zlib으로 압축한 206KB 블롭
-
-앱은 시작할 때 블롭을 풀고, 선택한 LUT을 `LorenzoDecoder`로 복원해 3D 텍스처로 올립니다.
-값 배치는 `index = ((b*17 + g)*17 + r)*3 + c` (R이 가장 빠름)로 원본과 동일합니다.
-
-`tools/extract_luts.py` 가 원본 HTML에서 위 두 파일과 테스트 골든(`app/src/test/resources/lut_golden.json`)을
-다시 만들어 냅니다:
-
-```bash
-python3 tools/extract_luts.py path/to/Tonefinder.html
-```
-
-## 빌드
-
-GitHub Actions(`.github/workflows/android.yml`)가 `main` 푸시마다
-
-1. `:app:testDebugUnitTest` — LUT 디코더가 원본과 바이트 단위로 같은지(sha256 + 샘플 노드),
-   57종 매핑/브랜드 개수, 트라이리니어 보간, 회전·크롭 변환 행렬을 검증
-2. `:app:assembleDebug` 로 `app-debug.apk` 생성
-3. `v1.0.{빌드번호}` 릴리스에 APK 게시
-
-로컬 빌드: Android SDK 35 + JDK 17 + Gradle 8.9, `gradle :app:assembleDebug`.
-
-## CI 활성화 (GitHub Actions)
-
-`.github/workflows/android.yml` 로 두면 `main` 푸시마다 테스트 → APK 빌드 → 릴리스가 자동으로 돕니다.
-워크플로 정의는 이 저장소의 `ci/android-workflow.yml` 에 들어 있습니다. 푸시에 쓰는 GitHub App에
-`workflows` 권한이 없어 `.github/workflows/` 경로에는 직접 쓸 수 없으므로, 다음 중 하나로 활성화하세요.
-
-1. GitHub → Settings → Applications → Pickle → Configure → Repository permissions 에서
-   **Workflows: Read and write** 로 변경한 뒤 `ci/android-workflow.yml` 을 `.github/workflows/android.yml` 로 이동
-2. 또는 GitHub 웹 편집기에서 `.github/workflows/android.yml` 을 만들고 `ci/android-workflow.yml` 내용을 붙여넣기
-
-## 내려받기
+## 받기
 
 최신 APK: <https://github.com/plenuen-cpu/Lut-studio/releases/latest>
 
-![필름스트립 아트](docs/filmstrip-preview.png)
+- `Lumen-2.0.0.apk` — release 빌드(디버그 키로 서명, 바로 설치 가능)
+- `Lumen-2.0.0-debug.apk` — debug 빌드
 
-## 설치
+설치 후 갤러리에서 사진을 고르면 됩니다. 서명 키가 빌드마다 같지 않을 수 있으므로,
+이미 설치된 Lumen이 있으면 먼저 삭제하고 설치하세요. (패키지 이름이 `com.plenuen.filmcam`인
+옛 FilmCam과는 별개 앱이라 함께 설치해도 됩니다.)
 
-릴리스에서 `FilmCam-debug.apk`를 받아 설치하세요. CI가 매번 새 디버그 키로 서명하므로
-**이미 설치된 FilmCam이 있으면 먼저 삭제한 뒤 설치**해야 합니다.
+## 무엇이 들어 있나
 
-## 참고
+### 1. 비파괴 편집
+- 원본은 읽기 전용. `EditRecipe`(파라미터 30여 개) + 히스토리 스택만 바뀝니다.
+- 되돌리기/다시 실행, 초기화, **화면을 길게 눌러 원본과 비교**, 슬라이더 수동 미세조정.
+- 저장은 항상 **원본 해상도의 새 파일** → `Pictures/Lumen/Lumen_yyyyMMdd_HHmmss.jpg`.
 
-- 사진은 기기 안에서만 처리되며 어디로도 전송되지 않습니다.
-- 룩 데이터는 사용자가 만든 Tonefinder 2.0.1의 내장 LUT에서 추출했습니다.
+### 2. GLES 3.0 실시간 파이프라인 (프리뷰·내보내기 공용)
+한 개의 프래그먼트 셰이더(`gl/ShaderSource.kt`)가 아래를 모두 실제로 계산합니다.
+
+| 묶음 | 파라미터 |
+| --- | --- |
+| 기하 | 수평 맞춤(±15°), 수직 원근, 자동 내접 크롭 |
+| 기본 톤 | 노출, 대비, 하이라이트, 섀도우, 화이트, 블랙, 페이드 |
+| 색감 | 색온도, 틴트, 활기, 채도, 색 정돈, 색 교차, 색 분리(섀도우/하이라이트 색상·균형), 피부톤 정리, 흑백 |
+| 디테일·질감 | 명료도, 텍스처, 디헤이즈, 샤프닝, 글로우, 할레이션, 그레인, 비네팅 |
+| 강조 | 피사체 강조(중심 분리 + 주변 누르기) |
+| 룩 | 3D LUT 57종 + 룩 강도 |
+
+### 3. 자동 수평·수직
+- **구조 텐서(structure tensor) 투표**로 기울기를 추정합니다: 640px 이하로 줄인 휘도 → 3×3 가우시안 →
+  중심 차분 기울기 → 12px 블록마다 기울기 2차 모멘트 → ±45°로 접은 뒤 0.1° 히스토그램 → 피크 보간.
+- 수평(0°)과 수직(90°)이 같은 축에 투표하므로 **수평·수직이 한 번에** 맞습니다.
+- 회전 각도에 맞춰 `cropScale = max(cosθ + sinθ/a, cosθ + a·sinθ)`만큼 화면을 확대해
+  **검은 테두리(빈 코너)가 생기지 않습니다**. 프리뷰와 원본 해상도 저장 모두 같은 UV 변환을 씁니다.
+- 원터치 **[자동 수평·수직]** 버튼, 수동 각도 슬라이더(0.1° 단위), "수직 원근" 슬라이더 제공.
+
+### 4. 자연어 엔진 (하이브리드)
+1. **즉각 파서(규칙)** — 사전 기반이라 0.01초 안에 응답합니다.
+   - 17개 정밀 매핑: 부드럽게 · 선명하게 · 묵직하게 · 화사하게 · 고급스럽게 · 자연스럽게 · 감성적으로 ·
+     청량하게 · 따스하게 · 쓸쓸하게 · 영화처럼 · 아련하게 · 생동감 있게 · 정갈하게 · 입체적으로 ·
+     투명하게 · 필름처럼
+   - 대표 룩: 필름 · 시네마틱 · 틸앤오렌지 · 화보 · 빈티지 · 세련되게 · 드라마틱하게 · 일본 스냅 ·
+     흑백/라이카 모노 · 야경/네온 · 인물/뽀얗게
+   - 시간·계절(새벽, 황혼, 여름, 겨울, 가을 오후), 공기(안개 낀 듯, 습하게, 공기가 맑게),
+     기억(옛날 사진, 꿈속처럼), 매체(잡지, 광고, 다큐멘터리)
+   - 미적 평가(예쁘게, 작품처럼, 있어 보이게, 전문가처럼, SNS 감성)는 **사진 히스토그램을 분석해**
+     노출·섀도우·채도·색온도·클리핑 보정량을 그 사진에 맞게 정합니다.
+   - 강도 부사: 아주 살짝 / 조금 · 살짝 / 적당히 / 진하게 / 확 · 세게 …
+   - 연속 대화: "더 따뜻하게", "덜", "절반만", "취소/되돌리기", "다시 실행", "초기화"
+   - 수평·수직: "수평 맞춰줘", "수직 수평 맞춰줘", "기울기 잡아줘", "반듯하게", "똑바로", "왼쪽으로 3도"
+   - 룩 이름: "포트라 400", "벨비아", "라이카 모노" … → 57종 라이브러리에서 찾아 적용
+2. **로컬 LLM** — 파서가 이해하지 못한 문장(또는 남은 부분)만 온디바이스 모델이 JSON으로 해석합니다.
+   - 모델: **Qwen2.5-0.5B-Instruct (q8, 547MB)** 기본 / Qwen2.5-1.5B-Instruct (q8, 1.6GB) 선택
+   - 런타임: MediaPipe **LLM Inference API**(`com.google.mediapipe:tasks-genai`, NDK 빌드 불필요)
+   - 배포: APK에 넣지 않고 **첫 사용 시 진행률과 함께 Hugging Face에서 다운로드** → 앱 전용 저장소
+   - 디코딩은 greedy(topK=1)로 고정해 같은 문장이 같은 결과를 내도록 했습니다.
+   - 출력은 `{"label","summary","adjust":{...}}` 형태로 강제하고, 앱은 허용된 키만 받아
+     범위를 다시 클램프합니다. 기하(회전)와 LUT 선택은 모델이 건드릴 수 없습니다.
+   - 모델이 없거나 실패하면 규칙 파서 결과만으로 조용히 동작합니다.
+
+### 5. 57종 3D LUT
+- `assets/luts/presets.json` + `lut_residuals.bin` (206KB, Lorenzo 잔차 zlib)
+- 앱 시작 시 풀고, 선택한 LUT만 `LorenzoDecoder`로 복원해 17³ 3D 텍스처로 올립니다.
+
+## 빌드
+
+```bash
+# JDK 17, Android SDK 35, Gradle 8.9
+gradle :app:testDebugUnitTest     # 단위 테스트 40개
+gradle :app:assembleDebug         # app-debug.apk
+gradle :app:assembleRelease       # app-release.apk (디버그 키로 서명)
+```
+
+APK 확인:
+
+```bash
+$ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose app/build/outputs/apk/release/app-release.apk
+$ANDROID_HOME/build-tools/35.0.0/aapt2 dump badging app/build/outputs/apk/release/app-release.apk
+```
+
+## 테스트가 고정하는 것
+
+- 자연어 17개 매핑 · 대표 룩 · 강도 부사 · 대화 제어 · 수평·수직 문장 · 수동 각도 · 다중 의도
+- 미적 평가가 사진 밝기에 따라 다른 보정을 내는지
+- 레시피 클램프·누적·Set 블렌딩·JSON 왕복·히스토리(undo/redo/reset/half)
+- 기울기 추정(사인·부드러운 줄무늬 3°·5°·-4°, 수직선, 평면)과 보정 후 줄이 수평이 되는지
+- 내접 크롭이 네 모서리를 원본 안에 유지하는지
+- LUT 57종 SHA-256이 이전 빌드와 같은지
+- 로컬 LLM JSON 파싱(코드펜스·잡설·미지의 키·범위 초과)
+
+## 실기기에서 확인해야 하는 것
+
+정적 빌드·단위 테스트·서명 검증까지는 이 환경에서 끝냈지만, **GL 렌더링과 로컬 LLM은 실제 GPU·NPU가
+필요해 여기서 실행해 볼 수 없습니다.** 설치 후 아래를 확인하세요.
+
+1. 갤러리 사진이 프리뷰에 뜨고 슬라이더/문장 보정이 즉시 반영되는지 (GLES 3.0 + 3D 텍스처)
+2. [자동 수평·수직]이 기운 사진을 곧게 세우고 검은 코너가 생기지 않는지
+3. [저장] 후 `Pictures/Lumen`의 파일이 화면과 같은지(원본 해상도)
+4. 설정에서 모델(547MB)을 내려받고, 규칙이 모르는 문장이 LLM으로 해석되는지
+5. 아주 큰 사진(8000px 초과)에서 저장 시 자동 축소 안내가 뜨는지
+
+## 파일 지도
+
+```
+app/src/main/java/com/plenuen/lumen/
+  core/      Param.kt, EditRecipe.kt, RecipeDelta.kt, RecipeSession.kt   (비파괴 상태·히스토리)
+  nl/        IntentCatalog.kt, NaturalLanguageParser.kt, SceneAnalyzer.kt, AestheticPlanner.kt
+  geom/      StraightenEstimator.kt, GeometryMath.kt                     (기울기·내접 크롭)
+  gl/        ShaderSource.kt, PhotoProgram.kt, PhotoRenderer.kt, OffscreenExporter.kt
+  llm/       LlmModels.kt, LlmModelStore.kt, LocalLlmEngine.kt, LlmRecipeDecoder.kt
+  image/     PhotoStore.kt                                               (읽기·새 파일 저장)
+  data/      LutLibrary.kt, LorenzoDecoder.kt, PresetCatalog.kt, Json.kt (57종 LUT)
+  ui/        EditorScreen.kt, EditorViewModel.kt, Theme.kt
+```
