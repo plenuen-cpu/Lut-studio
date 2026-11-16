@@ -3,6 +3,7 @@ package com.plenuen.lumen.llm
 import android.content.Context
 import android.util.Log
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
+import com.plenuen.lumen.nl.NaturalLanguageParser
 import com.plenuen.lumen.nl.SceneStats
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -15,6 +16,11 @@ import kotlinx.coroutines.withContext
  *
  * The instant rule parser always answers first; this is only asked when the sentence is beyond the
  * rules or when the user has turned the model on and it is available.
+ *
+ * Two things keep a 0.5B model steady on spoken Korean: the spoken-language filler is stripped from
+ * the request before it is put into the prompt ([NaturalLanguageParser.salient]), and the prompt
+ * itself carries the filler/negation rules and two or three slang examples (see
+ * [LlmRecipeDecoder.buildPrompt]).
  */
 class LocalLlmEngine(private val context: Context) {
 
@@ -78,7 +84,12 @@ class LocalLlmEngine(private val context: Context) {
         val engine = inference ?: return@withContext null
         // MediaPipe .task 번들이 Qwen 채팅 템플릿을 직접 입힌다. 여기서 <|im_start|>를 또 넣으면
         // 템플릿이 두 번 적용돼 모델이 JSON 대신 특수 토큰을 토해 낸다.
-        val prompt = LlmRecipeDecoder.buildPrompt(request, lutNames, sceneHint(stats))
+        // 말버릇("그거 아시죠", "뭔가", "약간 그런")은 작은 모델을 흔들기만 하므로 먼저 덜어 낸다.
+        val prompt = LlmRecipeDecoder.buildPrompt(
+            NaturalLanguageParser.salient(request),
+            lutNames,
+            sceneHint(stats),
+        )
         val answer = try {
             engine.generateResponse(prompt)
         } catch (t: Throwable) {

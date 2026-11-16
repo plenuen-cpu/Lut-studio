@@ -83,7 +83,8 @@ import com.plenuen.lumen.gl.RenderSpec
 import com.plenuen.lumen.llm.LlmModels
 
 private val QUICK_PROMPTS = listOf(
-    "부드럽게", "따뜻하게", "영화처럼", "필름처럼", "청량하게", "흑백으로", "예쁘게", "수평 맞춰줘",
+    "부드럽게", "따뜻하게", "영화처럼", "필름처럼", "청량하게", "흑백으로", "예쁘게", "샤하게",
+    "꾸안꾸", "포인트 있게", "눈에 띄게", "너무 화려하지는 않게", "수평 맞춰줘",
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

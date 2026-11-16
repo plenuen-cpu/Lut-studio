@@ -229,12 +229,27 @@ class EditorViewModel(
                 val delta = hit.intent.aesthetic?.let { profile ->
                     AestheticPlanner.plan(profile, current.scene)
                 } ?: hit.intent.delta
-                if (!delta.isEmpty) {
-                    session.apply(hit.intent.label, delta, hit.strength)
+                val strength = parsed.strengthOf(hit)
+                if (!delta.isEmpty && strength != 0f) {
+                    session.apply(hit.intent.label, delta, strength)
                     applied = true
-                    summaryParts += "${hit.intent.label} ${(hit.strength * 100).toInt()}%"
+                    summaryParts += "${hit.intent.label} ${(strength * 100).toInt()}%"
                 }
             }
+        }
+
+        // 3-1) 문장이 건 제한 ("너무 화려하지는 않게", "그레인 빼고", "부드럽게 말고")
+        if (parsed.restraints.isNotEmpty()) {
+            val label = parsed.restraints.joinToString(" · ") { it.restraint.label }
+            var next = session.current
+            for (hit in parsed.restraints) {
+                hit.restraint.delta?.let { delta -> next = next.apply(delta, parsed.strengthScale) }
+            }
+            next = parsed.restrained(next)
+            if (next != session.current) session.replace(next, label)
+            // 이미 그런 상태라 바뀐 값이 없어도 문장은 알아들은 것이므로 모델로 넘기지 않는다.
+            applied = true
+            summaryParts += label
         }
 
         // 4) LUT 지정
@@ -289,7 +304,11 @@ class EditorViewModel(
 
         // 규칙이 다 읽지 못한 나머지 문장이 남아 있으면 로컬 LLM이 그 부분만 이어서 해석한다.
         val leftover = parsed.unmatched.trim()
-        if (leftover.length >= 2) {
+        // 한 낱말짜리 꼬리("피부", "하늘")는 이미 읽은 문장의 일부다. 두 낱말 이상이거나 세 글자
+        // 이상 남았을 때만 모델에게 물어, 알아들은 문장을 다시 해석하게 만들지 않는다.
+        val worthAsking = leftover.isNotEmpty() &&
+            (leftover.split(' ').size >= 2 || leftover.length >= 3)
+        if (worthAsking) {
             scope.launch {
                 // 룰이 이미 반영한 뒤의 자투리 문장이라, 모델이 없을 때 다운로드 안내로 덮지 않는다.
                 if (interpretWithLlm(leftover, before, notifyMissingModel = false)) pushState()
