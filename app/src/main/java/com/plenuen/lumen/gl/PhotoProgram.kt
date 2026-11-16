@@ -1,6 +1,7 @@
 package com.plenuen.lumen.gl
 
 import android.graphics.Bitmap
+import android.util.Log
 import android.opengl.GLES30
 import android.opengl.GLUtils
 import com.plenuen.lumen.core.EditRecipe
@@ -256,7 +257,15 @@ class PhotoProgram {
         }
 
         /** Uploads a decoded 17^3 LUT as a trilinear 3D texture. */
+        /** Bytes a 17×17×17 RGB cube takes; anything shorter would be read past its end. */
+        const val LUT_BYTES = 17 * 17 * 17 * 3
+
         fun uploadLut(lut: ByteArray, textureId: Int) {
+            // 짧은 버퍼를 17³ 크기로 올리면 드라이버가 버퍼 밖을 읽고 프로세스가 그 자리에서 죽는다.
+            if (lut.size < LUT_BYTES) {
+                Log.w("LumenGl", "LUT too short: ${lut.size} < $LUT_BYTES, not uploaded")
+                return
+            }
             GLES30.glBindTexture(GLES30.GL_TEXTURE_3D, textureId)
             GLES30.glTexParameteri(GLES30.GL_TEXTURE_3D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
             GLES30.glTexParameteri(GLES30.GL_TEXTURE_3D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
