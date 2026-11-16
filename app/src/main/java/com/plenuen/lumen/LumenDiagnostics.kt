@@ -34,6 +34,32 @@ object LumenDiagnostics {
         logFile = File(context.applicationContext.filesDir, FILE_NAME)
     }
 
+    /**
+     * Leaves a breadcrumb *before* work that can kill the process without an exception.
+     *
+     * Native code (the LLM engine) aborts with SIGABRT instead of throwing, so the last breadcrumb in
+     * this file is the only way to know which call the process died in. The line is flushed and
+     * fsync'd on the spot: a buffered write would be lost with the process.
+     */
+    fun trace(where: String, detail: String = "") {
+        val text = buildString {
+            append(stamp.format(Date()))
+            append(" · ").append(where)
+            if (detail.isNotBlank()) append(" · ").append(detail.take(200))
+            append('\n')
+        }
+        Log.i(TAG, "trace $where $detail")
+        runCatching {
+            val file = logFile ?: return@runCatching
+            if (file.length() > MAX_BYTES) file.writeText("")
+            java.io.FileOutputStream(file, true).use { out ->
+                out.write(text.toByteArray())
+                out.flush()
+                out.fd.sync()
+            }
+        }
+    }
+
     /** Appends one failure; the reason, thread and first frames are what a report needs. */
     fun record(where: String, error: Throwable) {
         val text = buildString {

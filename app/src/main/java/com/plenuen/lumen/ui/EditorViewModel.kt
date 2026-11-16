@@ -253,7 +253,12 @@ class EditorViewModel(
             }
             if (!result.applied) {
                 // 사전에 없는 표현은 곧바로 로컬 LLM 추론 경로로 넘긴다.
-                safeLaunch("submitPrompt/model") { interpretWithLlm(trimmed, result.before) }
+                // 모델이 없거나 읽지 못하면 마지막으로 느낌 낱말만으로 조용히 보정해 본다.
+                safeLaunch("submitPrompt/model") {
+                    if (!interpretWithLlm(trimmed, result.before)) {
+                        applyFeelFallback(trimmed, result.before)
+                    }
+                }
                 return
             }
             if (result.autoStraightenRequested) autoStraighten(announce = false)
@@ -299,6 +304,29 @@ class EditorViewModel(
                 )
             }
         }
+    }
+
+    /**
+     * Last resort for a sentence the rules did not know and the model could not read.
+     *
+     * The vocabulary is small and the amounts are small on purpose: this runs where the model failed,
+     * so it must never claim more than a mood word can justify. The card says which way it read the
+     * sentence so the user can undo it in one tap if that is not what they meant.
+     */
+    private fun applyFeelFallback(text: String, before: EditRecipe): Boolean {
+        val feel = PromptEngine.feelFallback(text) ?: return false
+        session.apply(feel.label, feel.delta, 1f)
+        val sentence = EditNarrator.describe(before, session.current) ?: feel.summary
+        _state.update {
+            it.copy(
+                busy = null,
+                note = Note("$sentence (느낌 낱말만으로 해석했어요)", caption = "느낌으로 해석"),
+                chips = (it.chips + feel.label).distinct().takeLast(8),
+                llm = it.llm.copy(lastRequest = text),
+            )
+        }
+        pushState()
+        return true
     }
 
     private fun findLut(query: String): LutPreset? {
@@ -349,6 +377,10 @@ class EditorViewModel(
         }
 
         _state.update { it.copy(busy = "로컬 LLM이 문장을 읽는 중…") }
+        // 모델은 547MB~1.6GB를 매핑하고 KV 캐시까지 잡는다. 그 전에 NIMA 평가기가 쥐고 있던
+        // EGL 컨텍스트·텍스처·인터프리터를 놓아 준다(다음 점수 측정 때 다시 만든다). 이 앱에서
+        // 가장 큰 비필수 할당이라, 저사양 기기에서 LMK에 죽는 창을 좁히는 몫을 한다.
+        if (!llm.isReady()) releaseEvaluatorForModel()
         if (!llm.ensureLoaded(model, modelStore.fileFor(model))) {
             _state.update {
                 it.copy(
@@ -516,6 +548,23 @@ class EditorViewModel(
             )
         }
         pushState()
+    }
+
+    /**
+     * Closes the NIMA evaluator before the local model is mapped into the process.
+     *
+     * The evaluator owns an EGL context, its textures and a TFLite interpreter; none of it is needed
+     * while a sentence is being read, and giving it back first leaves the model load the larger share
+     * of the address space. It is rebuilt on [nimaThread] at the next score request.
+     */
+    private suspend fun releaseEvaluatorForModel() = withContext(nimaThread) {
+        // 측정이 진행 중이면 먼저 멈춘다. 닫힌 평가기를 건드린 측정은 예외로 끝나고,
+        // 그 예외가 "NIMA 불가" 플래그를 세워 점수판을 꺼 버리기 때문이다.
+        scoreJob?.cancel()
+        scoreJob = null
+        runCatching { evaluator?.close() }
+        evaluator = null
+        evaluatorSource = null
     }
 
     /**

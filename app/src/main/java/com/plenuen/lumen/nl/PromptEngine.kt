@@ -240,6 +240,76 @@ object PromptEngine {
         )
     }
 
+    /** A mood word turned into a small correction, for when neither the rules nor the model read it. */
+    data class Feel(val label: String, val delta: RecipeDelta, val summary: String)
+
+    private class FeelRule(
+        val keywords: List<String>,
+        val label: String,
+        val summary: String,
+        val ops: List<RecipeDelta.Op>,
+    )
+
+    /**
+     * 기분·분위기 낱말만으로 읽는 마지막 보정표.
+     *
+     * 사전에 없는 문장이 로컬 LLM까지 실패했을 때(모델 없음·해석 실패) 빈손으로 돌려보내지 않기
+     * 위한 것이다. 값은 의도 카탈로그보다 작게 잡는다 — 근거가 낱말 하나뿐이라 크게 움직일 수 없다.
+     */
+    private val FEELS: List<FeelRule> = listOf(
+        FeelRule(
+            listOf("몽환", "꿈결", "신비", "환상", "동화"),
+            "몽환", "글로우와 페이드로 꿈결 같은 분위기를 냈어요.",
+            listOf(RecipeDelta.Op.Add(Param.GLOW, 0.22f), RecipeDelta.Op.Add(Param.FADE, 0.16f), RecipeDelta.Op.Add(Param.SATURATION, -0.10f)),
+        ),
+        FeelRule(
+            listOf("쓸쓸", "적막", "외로", "스산", "황량"),
+            "쓸쓸함", "채도와 노출을 낮춰 담담하게 만들었어요.",
+            listOf(RecipeDelta.Op.Add(Param.SATURATION, -0.18f), RecipeDelta.Op.Add(Param.EXPOSURE, -0.08f), RecipeDelta.Op.Add(Param.CLARITY, -0.06f)),
+        ),
+        FeelRule(
+            listOf("청량", "싱그", "상쾌", "여름", "풋풋"),
+            "청량", "채도를 올리고 색온도를 시원하게 했어요.",
+            listOf(RecipeDelta.Op.Add(Param.SATURATION, 0.16f), RecipeDelta.Op.Add(Param.TEMPERATURE, -0.12f), RecipeDelta.Op.Add(Param.EXPOSURE, 0.08f)),
+        ),
+        FeelRule(
+            listOf("빈티지", "레트로", "복고", "옛날", "오래된"),
+            "빈티지", "페이드와 그레인으로 오래된 사진처럼 했어요.",
+            listOf(RecipeDelta.Op.Add(Param.FADE, 0.16f), RecipeDelta.Op.Add(Param.GRAIN, 0.12f), RecipeDelta.Op.Add(Param.SATURATION, -0.08f)),
+        ),
+        FeelRule(
+            listOf("세련", "시크", "도시적", "모던", "고급"),
+            "세련", "대비와 명료도를 올리되 채도는 눌렀어요.",
+            listOf(RecipeDelta.Op.Add(Param.CONTRAST, 0.14f), RecipeDelta.Op.Add(Param.CLARITY, 0.12f), RecipeDelta.Op.Add(Param.SATURATION, -0.08f)),
+        ),
+        FeelRule(
+            listOf("포근", "아늑", "은은", "따사", "나른"),
+            "포근함", "대비와 질감을 낮춰 부드럽게 했어요.",
+            listOf(RecipeDelta.Op.Add(Param.CONTRAST, -0.10f), RecipeDelta.Op.Add(Param.TEXTURE, -0.12f), RecipeDelta.Op.Add(Param.TEMPERATURE, 0.10f)),
+        ),
+        FeelRule(
+            listOf("드라마", "강렬", "임팩트", "묵직", "웅장"),
+            "드라마틱", "대비와 비네팅으로 힘을 실었어요.",
+            listOf(RecipeDelta.Op.Add(Param.CONTRAST, 0.18f), RecipeDelta.Op.Add(Param.VIGNETTE, 0.12f), RecipeDelta.Op.Add(Param.CLARITY, 0.10f)),
+        ),
+        FeelRule(
+            listOf("설렘", "행복", "따뜻", "온기", "노을", "석양"),
+            "따뜻함", "색온도와 글로우로 온기를 더했어요.",
+            listOf(RecipeDelta.Op.Add(Param.TEMPERATURE, 0.18f), RecipeDelta.Op.Add(Param.GLOW, 0.10f), RecipeDelta.Op.Add(Param.HIGHLIGHTS, -0.06f)),
+        ),
+    )
+
+    /**
+     * Reads a mood word the rule table did not know. Returns null when nothing here fits, which is
+     * the honest answer: the caller then shows its "해석하지 못했어요" card.
+     */
+    fun feelFallback(text: String): Feel? {
+        val normalized = text.lowercase().filter { !it.isWhitespace() }
+        if (normalized.length < 2) return null
+        val rule = FEELS.firstOrNull { feel -> feel.keywords.any { normalized.contains(it) } } ?: return null
+        return Feel(rule.label, RecipeDelta(rule.label, rule.ops), rule.summary)
+    }
+
     /**
      * The rules left this much of the sentence unread; ask the model only when it carries meaning.
      *

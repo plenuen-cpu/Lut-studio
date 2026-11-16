@@ -1,4 +1,4 @@
-# Lumen 2.2.1 — 자연어 비파괴 사진 보정 (Android)
+# Lumen 2.2.2 — 자연어 비파괴 사진 보정 (Android)
 
 사진 한 장을 고르고 **"조금 더 따뜻하게, 부드럽게"** 처럼 말하면 그대로 보정되는 안드로이드 앱입니다.
 원본 파일은 절대 건드리지 않고, 모든 보정은 `EditRecipe`라는 JSON 상태와 히스토리로만 관리합니다.
@@ -12,7 +12,7 @@
 
 최신 APK: <https://github.com/plenuen-cpu/Lut-studio/releases/latest>
 
-- `Lumen-2.2.1.apk` — release 빌드(디버그 키로 서명, 바로 설치 가능, 62.3MB)
+- `Lumen-2.2.2.apk` — release 빌드(디버그 키로 서명, 바로 설치 가능, 59.4MB)
 
 온디바이스 인물 분리 모델(16MB)과 NIMA 미적 평가 모델(6.4MB), MediaPipe Vision·TensorFlow Lite
 라이브러리가 APK에 함께 들어 있습니다. 사진은 물론 모델 추론도 네트워크를 쓰지 않습니다.

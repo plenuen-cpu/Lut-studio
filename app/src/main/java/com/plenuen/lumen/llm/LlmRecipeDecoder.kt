@@ -1,5 +1,6 @@
 package com.plenuen.lumen.llm
 
+import com.plenuen.lumen.core.HslBand
 import com.plenuen.lumen.core.Param
 import com.plenuen.lumen.core.RecipeDelta
 import com.plenuen.lumen.data.Json
@@ -245,48 +246,69 @@ object LlmRecipeDecoder {
     }
 
     /**
-     * Builds the prompt. The key list, the shape and the "two or more parameters" rule are fixed so
-     * a small model only has to fill in numbers.
+     * Longest part of a request that reaches the prompt.
+     *
+     * A pasted paragraph must not be able to grow the prompt past [LlmBudget.PROMPT_BUDGET]: the
+     * engine treats an oversized prompt as fatal, so the size is capped here and not only trusted to
+     * the caller.
+     */
+    const val MAX_REQUEST_CHARS = 120
+
+    /**
+     * Builds the prompt.
+     *
+     * The size is part of the contract, not an accident: the engine's `maxTokens` counts prompt plus
+     * answer, and overrunning it is fatal at the native level rather than a failed call (see
+     * [LlmBudget]). So the rules keep their meaning but lose their long explanations, the key list
+     * carries the English keys only (the parser already accepts them, and the Korean labels cost
+     * twice the tokens), and three examples cover shape, slang/negation and region/colour.
      */
     fun buildPrompt(request: String, lutNames: List<String>, sceneHint: String = ""): String {
-        val keys = LlmScale.allowed.joinToString(", ") { "${it.key}(${it.label})" }
-        val lutSample = lutNames.take(10).joinToString(", ")
+        val keys = baseKeys().joinToString(",") { it.key }
+        val lutSample = lutNames.take(6).joinToString(", ")
         val scene = sceneHint.trim()
         return """
-            너는 사진 보정 앱 '루멘'의 의도 분석기다. 사용자의 요청을 읽고 사진에 적용할 보정값을 JSON 하나로만 답한다.
-
+            사진 보정 앱 '루멘'의 의도 분석기다. 요청을 읽고 적용할 보정값을 JSON 하나로만 답한다.
             규칙:
-            1. 사전에 없는 표현, 추상적·감성적·비유적·구체적 묘사라도 사진학적·미학적으로 해석해서 반드시 서로 다른 파라미터 2개 이상을 조정한다.
-            2. 값은 -1.0(줄임) ~ 1.0(늘림) 사이의 상대값 실수다.
-            3. label은 12자 이내 한국어 이름, summary는 사용자가 읽을 한 문장 한국어 설명이다.
-            4. JSON 외의 문장, 인사말, 설명, 코드블록을 쓰지 않는다.
-            5. "그거 아시죠", "뭔가", "음...", "약간 그런", "됐으면 좋겠어요" 같은 말버릇은 뜻이 없다. 무시하고 보정을 가리키는 말만 읽는다.
-            6. "~하지 않게", "~하지는 않은", "~는 말고"는 그 방향으로 올리지 말라는 뜻이다. 예: "너무 화려하지는 않게" → saturation을 올리지 않고 낮춘다. "과하지 않게"는 모든 값을 작게 잡는다.
-            7. "~하면서도 ~하지 않게"처럼 상반된 요구가 한 문장에 있으면 둘 다 지킨다. 예: "깔끔하면서도 포인트, 너무 화려하지는 않게" → subjectFocus·clarity는 올리고 saturation은 올리지 않는다.
-            8. 구어체·신조어는 사진 현장의 말로 읽는다. 샤하게=중간톤+글로우+피부톤, 뽀샤시=하얗고 부드럽게, 꾸안꾸=티 안 나게, 느좋=힘 뺀 필름 무드, 감다살=감성 최대, 힙하게=대비·윤곽 강하게.
-            9. "인물만·피사체만·배경만·하늘만"처럼 영역을 지정하면 그 영역 파라미터만 쓴다(인물=subject*, 배경=background*, 하늘=sky*). 영역을 말하지 않았으면 영역 파라미터를 쓰지 않는다.
-            10. 색 이름(빨강·주황·노랑·초록·청록·파랑·보라·자홍)이 나오면 그 대역의 색조/채도/밝기 파라미터만 쓴다(예: redSaturation, greenSaturation, yellowLuminance). "빼줘·줄여"는 그 색의 채도를 낮추라는 뜻이다.
-
-            출력 예시:
-            {"label":"차분하게","summary":"채도를 낮추고 대비를 부드럽게 했어요.","adjust":{"saturation":-0.35,"contrast":-0.2,"fade":0.15}}
-
-            구어체 예시:
-            "샤하게" → {"label":"샤하게","summary":"중간톤과 글로우를 올려 뽀샤시하게 했어요.","adjust":{"shadows":0.2,"skinToneClean":0.35,"glow":0.2,"texture":-0.2}}
-            "꾸안꾸 느낌, 근데 너무 화려하지는 않게" → {"label":"꾸안꾸","summary":"피부톤만 정리하고 채도는 올리지 않았어요.","adjust":{"skinToneClean":0.3,"saturation":-0.1,"colorHarmony":0.15}}
-            "느좋하게, 살짝 필름 느낌으로" → {"label":"느좋","summary":"페이드와 그레인으로 담백한 필름 무드를 냈어요.","adjust":{"fade":0.12,"grain":0.1,"saturation":-0.05}}
-
-            영역·색상 예시:
-            "인물만 화사하게" → {"label":"인물 화사","summary":"인물만 밝고 화사하게 했어요.","adjust":{"subjectExposure":0.3,"subjectSaturation":0.15}}
-            "배경만 차분하게, 하늘은 파랗게" → {"label":"영역 보정","summary":"배경은 차분하게, 하늘은 파랗게 했어요.","adjust":{"backgroundSaturation":-0.3,"backgroundExposure":-0.15,"skyBlue":0.45}}
-            "빨강만 살리고 초록은 차분하게" → {"label":"색 핀셋","summary":"빨강은 살리고 초록은 낮췄어요.","adjust":{"redSaturation":0.4,"greenSaturation":-0.35}}
-
-            쓸 수 있는 파라미터 키(이름): $keys
-            룩을 고르고 싶을 때만 "lut"에 다음 중 하나를 넣는다: $lutSample
+            1. 사전에 없는 표현도 사진미학적으로 해석해 서로 다른 파라미터 2개 이상을 조정한다.
+            2. 값은 -1.0(줄임)~1.0(늘림) 상대값. label은 한국어 12자 이내, summary는 한 문장.
+            3. JSON 외의 문장·인사말·설명은 쓰지 않는다. "그거 아시죠", "뭔가" 같은 말버릇은 무시한다.
+            4. "~하지 않게/~말고"는 그 방향으로 올리지 말라는 뜻이고 "과하지 않게"는 값을 작게 잡는다.
+            5. 구어체: 샤하게=중간톤+글로우, 뽀샤시=밝고 부드럽게, 꾸안꾸=티 안 나게, 느좋=힘 뺀 필름, 감다살=감성 최대, 힙하게=대비·윤곽.
+            6. "인물만/배경만/하늘만"이면 subject*, background*, sky*만 쓴다.
+            7. 색 이름이 나오면 redSaturation처럼 색+역할 키만 쓴다(색: red orange yellow green cyan blue purple magenta, 역할: Hue Saturation Luminance). "빼줘"는 그 색 채도를 낮춘다.
+            출력: {"label":"차분하게","summary":"채도를 낮추고 대비를 부드럽게 했어요.","adjust":{"saturation":-0.3,"contrast":-0.2,"fade":0.15}}
+            예: "샤하게, 너무 화려하지는 않게" → {"label":"샤하게","summary":"중간톤과 글로우를 올리고 채도는 낮췄어요.","adjust":{"shadows":0.2,"glow":0.2,"saturation":-0.1}}
+            예: "배경만 차분하게, 하늘은 파랗게" → {"label":"영역","summary":"배경은 차분히, 하늘은 파랗게. ","adjust":{"backgroundSaturation":-0.3,"skyBlue":0.45,"redSaturation":-0.1}}
+            키: $keys
+            룩(선택): $lutSample
             ${if (scene.isNotEmpty()) "사진 상태: $scene" else ""}
-
-            요청: $request
+            요청: ${request.take(MAX_REQUEST_CHARS)}
             JSON:
         """.trimIndent()
+    }
+
+    /**
+     * The prompt used when even the compact one measures over budget (a long request, an unfamiliar
+     * tokenizer): the rules stay, the examples and the scene line go.
+     */
+    fun buildShortPrompt(request: String): String {
+        val keys = baseKeys().joinToString(",") { it.key }
+        return """
+            사진 보정 앱 '루멘'의 의도 분석기다. 요청을 읽고 JSON 하나로만 답한다.
+            서로 다른 파라미터 2개 이상을 -1.0~1.0 상대값으로 조정하고 label(한국어)·summary(한 문장)를 넣는다.
+            "~하지 않게"는 그 방향으로 올리지 않는다. 색 이름은 redSaturation처럼 색+역할 키로 쓴다.
+            출력: {"label":"차분하게","summary":"채도를 낮췄어요.","adjust":{"saturation":-0.3,"contrast":-0.2}}
+            키: $keys
+            요청: ${request.take(MAX_REQUEST_CHARS)}
+            JSON:
+        """.trimIndent()
+    }
+
+    /** Tone and detail keys; the 24 colour-band keys are described by rule 7 instead of listed. */
+    private fun baseKeys(): List<Param> {
+        val band = HslBand.entries.flatMap { it.params }.toSet()
+        return LlmScale.allowed.filter { it !in band }
     }
 
     private val KEY_INDEX: Map<String, Param> = buildMap {
