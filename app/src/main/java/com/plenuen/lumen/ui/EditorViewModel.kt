@@ -121,6 +121,7 @@ class EditorViewModel(
         .asCoroutineDispatcher()
     private var evaluator: NimaEvaluator? = null
     private var evaluatorSource: Bitmap? = null
+    private var nimaUnavailable = false
     private var scoreJob: Job? = null
 
     init {
@@ -154,6 +155,7 @@ class EditorViewModel(
                 EditRecipe.NEUTRAL.with(Param.AUTO_STRAIGHTEN, 1f)
             }
             session = RecipeSession(initial)
+            nimaUnavailable = false
             _state.update {
                 it.copy(
                     loaded = true,
@@ -643,6 +645,8 @@ class EditorViewModel(
             if (!opened) {
                 NimaEvaluator.logUnavailable(created.status)
                 created.close()
+                // 모델을 못 열면 보정할 때마다 다시 시도하지 않는다(새 사진에서만 재시도).
+                nimaUnavailable = true
                 return@withContext null
             }
             evaluator = created
@@ -653,11 +657,13 @@ class EditorViewModel(
     /** Re-measures the NIMA score of the current recipe, debounced so slider drags stay smooth. */
     private fun scheduleNimaScore(immediate: Boolean = false) {
         val state = _state.value
-        if (!state.loaded || state.nimaBusy) return
+        if (!state.loaded || state.nimaBusy || nimaUnavailable) return
         val bitmap = state.preview ?: return
         scoreJob?.cancel()
         scoreJob = scope.launch {
             if (!immediate) delay(700)
+            // 그사이 자동 보정이 시작됐으면 중간 레시피를 재지 않는다.
+            if (_state.value.nimaBusy) return@launch
             val engine = ensureEvaluator(bitmap, _state.value.lutBytes) ?: return@launch
             val recipe = session.current
             val score = withContext(nimaThread) { engine.score(recipe) } ?: return@launch
@@ -901,10 +907,12 @@ class EditorViewModel(
         llm.close()
         maskGenerator.close()
         scoreJob?.cancel()
-        runCatching { evaluator?.close() }
-        evaluator = null
-        evaluatorSource = null
-        runCatching { nimaThread.close() }
+        // EGL 컨텍스트는 만든 스레드에서 닫는다(다른 스레드에서 닫으면 누수가 생긴다).
+        scope.launch(nimaThread) {
+            runCatching { evaluator?.close() }
+            evaluator = null
+            evaluatorSource = null
+        }
     }
 
     // ── 내부 ──────────────────────────────────────────────────────────────
