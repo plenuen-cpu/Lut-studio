@@ -78,7 +78,7 @@
 
 ```bash
 # JDK 17, Android SDK 35, Gradle 8.9
-gradle :app:testDebugUnitTest     # 단위 테스트 40개
+gradle :app:testDebugUnitTest     # 단위 테스트 39개
 gradle :app:assembleDebug         # app-debug.apk
 gradle :app:assembleRelease       # app-release.apk (디버그 키로 서명)
 ```

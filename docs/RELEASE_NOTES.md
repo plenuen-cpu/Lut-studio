@@ -19,7 +19,7 @@
 
 ## 검증
 
-- 단위 테스트 40개 통과 (`gradle :app:testDebugUnitTest`)
+- 단위 테스트 39개 통과 (`gradle :app:testDebugUnitTest`)
 - debug / release APK 빌드 및 `apksigner verify` 통과
 - 프리뷰·저장 셰이더 GLSL ES 3.00 컴파일 검증(glslangValidator)
 
