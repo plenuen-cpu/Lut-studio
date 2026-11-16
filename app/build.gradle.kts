@@ -12,8 +12,8 @@ android {
         applicationId = "com.plenuen.lumen"
         minSdk = 29
         targetSdk = 35
-        versionCode = 222
-        versionName = "2.2.2"
+        versionCode = 223
+        versionName = "2.2.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // 대상 단말은 arm64 안드로이드 폰이다. 32비트·x86 네이티브 라이브러리를 빼서 APK를 절반으로 줄인다.
         ndk { abiFilters += "arm64-v8a" }

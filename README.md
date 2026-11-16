@@ -1,4 +1,4 @@
-# Lumen 2.2.2 — 자연어 비파괴 사진 보정 (Android)
+# Lumen 2.2.3 — 자연어 비파괴 사진 보정 (Android)
 
 사진 한 장을 고르고 **"조금 더 따뜻하게, 부드럽게"** 처럼 말하면 그대로 보정되는 안드로이드 앱입니다.
 원본 파일은 절대 건드리지 않고, 모든 보정은 `EditRecipe`라는 JSON 상태와 히스토리로만 관리합니다.
@@ -12,7 +12,7 @@
 
 최신 APK: <https://github.com/plenuen-cpu/Lut-studio/releases/latest>
 
-- `Lumen-2.2.2.apk` — release 빌드(디버그 키로 서명, 바로 설치 가능, 59.4MB)
+- `Lumen-2.2.3.apk` — release 빌드(디버그 키로 서명, 바로 설치 가능)
 
 온디바이스 인물 분리 모델(16MB)과 NIMA 미적 평가 모델(6.4MB), MediaPipe Vision·TensorFlow Lite
 라이브러리가 APK에 함께 들어 있습니다. 사진은 물론 모델 추론도 네트워크를 쓰지 않습니다.
@@ -160,7 +160,7 @@
 
 ```bash
 # JDK 17, Android SDK 35, Gradle 8.9
-gradle :app:testDebugUnitTest     # 단위 테스트 139개
+gradle :app:testDebugUnitTest     # 단위 테스트 153개
 gradle :app:assembleDebug         # app-debug.apk
 gradle :app:assembleRelease       # app-release.apk (디버그 키로 서명)
 ```
@@ -183,6 +183,8 @@ $ANDROID_HOME/build-tools/35.0.0/aapt2 dump badging app/build/outputs/apk/releas
 - 내접 크롭이 네 모서리를 원본 안에 유지하는지
 - LUT 57종 SHA-256이 이전 빌드와 같은지
 - 로컬 LLM JSON 파싱(코드펜스·잡설·미지의 키·범위 초과·잘린 JSON·숫자 문자열·한국어 키·중첩 그룹)
+- 소스의 모든 `Regex(...)` 패턴이 **Android ICU 문법**을 지키는지(이스케이프 안 된 `{`/`}` 금지),
+  그리고 어떤 모양의 모델 답(문자열 속 중괄호·쉼표, 잘린 문자열, 빈 답)에도 예외가 나지 않는지
 - 보정 내역 문장이 실제 전/후 값에서 나오는지(단일/다중 항목, 룩 이름, 변화 없음)
 - 가로 비교가 프리뷰 표시일 뿐 저장 기본값에는 들어가지 않는지
 - 영역 지시 10가지가 그 영역 파라미터에만 걸리고 전체 노출·채도를 건드리지 않는지,

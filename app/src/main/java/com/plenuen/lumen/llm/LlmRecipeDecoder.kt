@@ -225,17 +225,157 @@ object LlmRecipeDecoder {
         val trimmed = builder.toString().trimEnd()
         if (trimmed.endsWith(":") || trimmed.endsWith(",")) builder.append("0")
         repeat(depth.coerceAtLeast(0)) { builder.append('}') }
-        return builder.toString().replace(Regex(",\\s*}"), "}")
+        return stripTrailingCommas(builder.toString())
     }
 
-    /** Accepts single quotes, bare keys and trailing commas, which a small model likes to write. */
+    /**
+     * Accepts single quotes, bare keys and trailing commas, which a small model likes to write.
+     *
+     * This is a character scan and not a regular expression on purpose. `Regex` is ICU on Android,
+     * where a `}` that does not close a quantifier is a syntax error (`U_REGEX_RULE_SYNTAX`, reported
+     * as [java.util.regex.PatternSyntaxException]), while the desktop JVM reads it as a literal — so a
+     * pattern that passes every JVM unit test can still throw on the phone, which is exactly how
+     * v2.2.2 failed. Nothing on the model path may depend on that difference.
+     */
     private fun relax(json: String): String {
-        var text = json.replace(Regex(",\\s*([}\\]])"), "\$1")
-        text = text.replace(Regex("'([^'\\\\]*)'\\s*:"), "\"\$1\":")
-        text = text.replace(Regex("([{,]\\s*)([A-Za-z_가-힣][A-Za-z0-9_가-힣]*)\\s*:"), "\$1\"\$2\":")
-        // 남은 작은따옴표 문자열
-        text = Regex(":\\s*'([^']*)'").replace(text) { "\"${it.groupValues[1]}\"" }
-        return text
+        if (json.isEmpty()) return json
+        val out = StringBuilder(json.length + 16)
+        var i = 0
+        while (i < json.length) {
+            when (val ch = json[i]) {
+                '"' -> i = copyDoubleQuoted(json, i, out)
+                '\'' -> i = copySingleQuotedAsDouble(json, i, out)
+                '{' -> {
+                    out.append(ch)
+                    i = quoteBareKeyAt(json, i + 1, out)
+                }
+                ',' -> {
+                    if (commaIsTrailing(json, i)) {
+                        i++
+                    } else {
+                        out.append(ch)
+                        i = quoteBareKeyAt(json, i + 1, out)
+                    }
+                }
+                else -> {
+                    out.append(ch)
+                    i++
+                }
+            }
+        }
+        return out.toString()
+    }
+
+    /** Copies one `"..."` run verbatim, escapes included. */
+    private fun copyDoubleQuoted(json: String, start: Int, out: StringBuilder): Int {
+        var i = start + 1
+        out.append('"')
+        while (i < json.length) {
+            val ch = json[i]
+            if (ch == '\\' && i + 1 < json.length) {
+                out.append(ch).append(json[i + 1])
+                i += 2
+                continue
+            }
+            out.append(ch)
+            i++
+            if (ch == '"') return i
+        }
+        return i
+    }
+
+    /** Rewrites one `'...'` run as a JSON string, leaving an unterminated one as it is. */
+    private fun copySingleQuotedAsDouble(json: String, start: Int, out: StringBuilder): Int {
+        var i = start + 1
+        val body = StringBuilder()
+        while (i < json.length) {
+            val ch = json[i]
+            if (ch == '\\' && i + 1 < json.length) {
+                body.append(ch).append(json[i + 1])
+                i += 2
+                continue
+            }
+            if (ch == '\'') {
+                out.append('"').append(body.toString().replace("\"", "\\\"")).append('"')
+                return i + 1
+            }
+            body.append(ch)
+            i++
+        }
+        out.append('\'').append(body)
+        return i
+    }
+
+    /** Writes leading blanks, then quotes a bare `key:` that starts here, if there is one. */
+    private fun quoteBareKeyAt(json: String, from: Int, out: StringBuilder): Int {
+        var i = from
+        while (i < json.length && json[i].isWhitespace()) {
+            out.append(json[i])
+            i++
+        }
+        if (i >= json.length) return i
+        val start = i
+        if (!isKeyStart(json[i])) return start
+        i++
+        while (i < json.length && isKeyPart(json[i])) i++
+        var colon = i
+        while (colon < json.length && json[colon].isWhitespace()) colon++
+        if (colon < json.length && json[colon] == ':') {
+            out.append('"').append(json, start, i).append('"')
+            return i
+        }
+        return start
+    }
+
+    private fun isKeyStart(ch: Char): Boolean =
+        ch in 'A'..'Z' || ch in 'a'..'z' || ch == '_' || ch in '가'..'힣'
+
+    private fun isKeyPart(ch: Char): Boolean = isKeyStart(ch) || ch in '0'..'9'
+
+    /** True when the only thing between this comma and a closing brace or bracket is blank space. */
+    private fun commaIsTrailing(json: String, comma: Int): Boolean {
+        var i = comma + 1
+        while (i < json.length && json[i].isWhitespace()) i++
+        return i < json.length && (json[i] == '}' || json[i] == ']')
+    }
+
+    /**
+     * Drops a comma that sits straight in front of `}` or `]`, which JSON forbids.
+     *
+     * String-aware, so a comma inside a label ("채도, 대비") survives untouched.
+     */
+    internal fun stripTrailingCommas(text: String): String {
+        if (text.indexOf(',') < 0) return text
+        val out = StringBuilder(text.length)
+        var i = 0
+        var inString = false
+        var escaped = false
+        while (i < text.length) {
+            val ch = text[i]
+            if (inString) {
+                out.append(ch)
+                when {
+                    escaped -> escaped = false
+                    ch == '\\' -> escaped = true
+                    ch == '"' -> inString = false
+                }
+                i++
+                continue
+            }
+            if (ch == '"') {
+                inString = true
+                out.append(ch)
+                i++
+                continue
+            }
+            if (ch == ',' && commaIsTrailing(text, i)) {
+                i++
+                continue
+            }
+            out.append(ch)
+            i++
+        }
+        return out.toString()
     }
 
     private fun repair(fragment: String): String? {
