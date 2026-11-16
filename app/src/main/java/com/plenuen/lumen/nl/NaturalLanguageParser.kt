@@ -40,6 +40,8 @@ object NaturalLanguageParser {
         val lutQuery: String? = null,
         val lutIntensity: Float? = null,
         val control: Control? = null,
+        /** "자동 보정", "NIMA 높여줘", "알아서 예쁘게" — NIMA로 점수를 올리는 자동 보정 요청. */
+        val nimaAuto: Boolean = false,
         val normalized: String = "",
         val unmatched: String = "",
         /** Negated descriptions and exclusions, in the order they appear. */
@@ -49,7 +51,7 @@ object NaturalLanguageParser {
         /** Directives aimed at one of the eight colour bands. */
         val colorHits: List<RegionColorParser.ColorHit> = emptyList(),
     ) {
-        val matched: Boolean get() = hits.isNotEmpty() || autoStraighten || straightenDeg != null ||
+        val matched: Boolean get() = hits.isNotEmpty() || nimaAuto || autoStraighten || straightenDeg != null ||
             lutQuery != null || control != null || restraints.isNotEmpty() ||
             regionHits.isNotEmpty() || colorHits.isNotEmpty()
 
@@ -59,6 +61,7 @@ object NaturalLanguageParser {
                 hits.size >= 2 || (hits.size + regionHits.size + colorHits.size) >= 2 -> 0.98f
                 hits.size == 1 && restraints.isNotEmpty() -> 0.97f
                 hits.size == 1 || regionHits.isNotEmpty() || colorHits.isNotEmpty() -> 0.95f
+                nimaAuto -> 0.95f
                 restraints.isNotEmpty() -> 0.9f
                 autoStraighten || straightenDeg != null -> 0.9f
                 lutQuery != null -> 0.85f
@@ -117,6 +120,7 @@ object NaturalLanguageParser {
                 regionHits.forEach { add(it.label) }
                 colorHits.forEach { add(it.label) }
                 if (autoStraighten) add("자동 수평·수직")
+                if (nimaAuto) add("✨ 자동(NIMA)")
                 straightenDeg?.let { add("수평 ${"%.1f".format(it)}°") }
                 lutQuery?.let { add("룩 $it") }
             }.joinToString(" · ")
@@ -160,6 +164,17 @@ object NaturalLanguageParser {
         "수평수직", "수직수평", "수평 수직", "수직 수평", "자동 수평", "수평 맞", "수평을 맞",
         "수평좀", "수평", "수직", "기울기", "기울", "반듯", "똑바로", "똑바르", "바르게",
         "비뚤", "삐뚤", "바로잡", "각도", "수평선", "지평선",
+    )
+
+    /**
+     * "자동 보정" 계열 — NIMA 점수가 잘 나오는 쪽으로 알아서 보정해 달라는 요청.
+     * 긴 표현을 앞에 두어 "자동 보정"이 다른 낱말에 먹히지 않게 한다.
+     */
+    private val NIMA_TOKENS = listOf(
+        "자동으로 보정", "자동으로 예쁘", "자동 보정", "자동보정", "자동으로 맞춰",
+        "알아서 보정", "알아서 예쁘", "알아서 해", "알아서 잘",
+        "점수 잘 나오", "점수 잘나오", "점수를 높", "점수 높", "점수 올", "점수 좋",
+        "점수 최", "점수 좀", "점수를 올", "점수가 잘", "nima", "니마",
     )
 
     private val CONTROL_WORDS: List<Pair<String, Control>> = listOf(
@@ -302,6 +317,16 @@ object NaturalLanguageParser {
             }
         }
 
+        // 2-2) NIMA 자동 보정 ("자동 보정", "NIMA 높여줘", "점수 잘 나오게", "알아서 예쁘게")
+        var nimaAuto = false
+        for (token in NIMA_TOKENS) {
+            val at = normalized.indexOf(token)
+            if (at >= 0) {
+                nimaAuto = true
+                mark(consumed, at, token.length)
+            }
+        }
+
         // 3) 영역·색상 지시 ("인물만 화사하게", "빨강만 살리고 초록은 차분하게")
         //    일반 룩 해석보다 먼저 읽어, 쓰인 낱말을 소비해 같은 요청이 사진 전체에 겹쳐 적용되지 않게 한다.
         val directed = RegionColorParser.scan(normalized, consumed)
@@ -354,6 +379,7 @@ object NaturalLanguageParser {
         return ParseResult(
             hits = ordered,
             autoStraighten = autoStraighten,
+            nimaAuto = nimaAuto,
             straightenDeg = degrees,
             lutQuery = intentLut ?: lutQuery,
             lutIntensity = ordered.mapNotNull { it.intent.lutIntensity }.firstOrNull(),

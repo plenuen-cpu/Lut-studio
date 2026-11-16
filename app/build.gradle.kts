@@ -12,8 +12,8 @@ android {
         applicationId = "com.plenuen.lumen"
         minSdk = 29
         targetSdk = 35
-        versionCode = 210
-        versionName = "2.1.0"
+        versionCode = 220
+        versionName = "2.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // 대상 단말은 arm64 안드로이드 폰이다. 32비트·x86 네이티브 라이브러리를 빼서 APK를 절반으로 줄인다.
         ndk { abiFilters += "arm64-v8a" }
@@ -21,7 +21,13 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // 릴리스 APK는 배포 호스트가 받는 크기(66MB) 안에 들어가야 한다. R8로 dex를 줄인다.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android.txt"),
+                "proguard-rules.pro",
+            )
             // 취미용 자체 배포 앱: 디버그 키로 서명해 바로 설치할 수 있게 한다.
             // (README의 '설치' 항목에 키가 바뀌면 재설치가 필요하다고 적어 둔다.)
             signingConfig = signingConfigs.getByName("debug")
@@ -77,6 +83,8 @@ dependencies {
     implementation("com.google.mediapipe:tasks-genai:0.10.24")
     // 온디바이스 세그멘테이션(인물·피사체 마스크). 모델 파일은 assets/models에 번들한다.
     implementation("com.google.mediapipe:tasks-vision:0.10.21")
+    // 온디바이스 NIMA 미적 평가 추론(자동 보정의 점수판). 모델은 assets/models에 번들한다.
+    implementation("org.tensorflow:tensorflow-lite:2.16.1")
 
     testImplementation("junit:junit:4.13.2")
 }

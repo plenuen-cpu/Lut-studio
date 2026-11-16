@@ -16,17 +16,25 @@ import com.plenuen.lumen.llm.LlmModel
 import com.plenuen.lumen.llm.LlmModelStore
 import com.plenuen.lumen.llm.LlmModels
 import com.plenuen.lumen.llm.LocalLlmEngine
+import com.plenuen.lumen.nima.NimaEvaluator
+import com.plenuen.lumen.nima.NimaOptimizer
+import com.plenuen.lumen.nima.NimaScores
 import com.plenuen.lumen.nl.AestheticPlanner
+import com.plenuen.lumen.nl.AestheticProfile
 import com.plenuen.lumen.nl.NaturalLanguageParser
 import com.plenuen.lumen.nl.SceneAnalyzer
 import com.plenuen.lumen.nl.SceneStats
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.Executors
 
 /**
  * Owns one open photo: its recipe history, the scene measurements, the LUT library and the local
@@ -53,6 +61,9 @@ class EditorViewModel(
         /** Shows a "설정" shortcut because the local model would have understood the sentence. */
         val suggestDownload: Boolean = false,
     )
+
+    /** One chip in the history bar; the bottom line cannot be deleted. */
+    data class StepView(val id: Long, val title: String, val isOrigin: Boolean)
 
     data class UiState(
         val loaded: Boolean = false,
@@ -86,6 +97,12 @@ class EditorViewModel(
         val lut: LutPreset? = null,
         val llm: LlmUi = LlmUi(),
         val historyLabels: List<String> = emptyList(),
+        /** Editable history: each chip is one step and tapping it lifts that step out. */
+        val steps: List<StepView> = emptyList(),
+        /** NIMA 미적 점수 of the current recipe (1~10); null until it has been measured. */
+        val nimaScore: Float? = null,
+        /** True while the automatic NIMA pass is running. */
+        val nimaBusy: Boolean = false,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -97,6 +114,14 @@ class EditorViewModel(
     private val modelStore = LlmModelStore(appContext)
     private val llm = LocalLlmEngine(appContext)
     private var session = RecipeSession()
+
+    // NIMA는 EGL 컨텍스트를 열어 두고 여러 번 그리므로, 한 스레드에서만 만진다.
+    private val nimaThread = Executors
+        .newSingleThreadExecutor { runnable -> Thread(runnable, "lumen-nima") }
+        .asCoroutineDispatcher()
+    private var evaluator: NimaEvaluator? = null
+    private var evaluatorSource: Bitmap? = null
+    private var scoreJob: Job? = null
 
     init {
         val downloaded = modelStore.downloadedModels().map { it.id }.toSet()
@@ -151,7 +176,8 @@ class EditorViewModel(
                     },
                     scene = stats,
                     straighten = straight,
-                    historyLabels = session.history.map { step -> step.label },
+                    historyLabels = session.titleList,
+                    steps = session.steps().map { step -> StepView(step.id, step.title, step.isOrigin) },
                     message = if (straight.isReliable) {
                         "수평을 ${"%.1f".format(straight.degrees)}° 자동으로 맞췄어요."
                     } else {
@@ -160,6 +186,7 @@ class EditorViewModel(
                 )
             }
             buildMask(loaded.bitmap)
+            scheduleNimaScore(immediate = true)
         }
     }
 
@@ -194,6 +221,11 @@ class EditorViewModel(
         if (trimmed.isEmpty() || !_state.value.loaded) return
         val parsed = NaturalLanguageParser.parse(trimmed)
         val current = _state.value
+        // "자동 보정", "NIMA 높여줘", "점수 잘 나오게" — 점수판(NIMA)을 쓴 자동 보정으로 바로 넘긴다.
+        if (parsed.nimaAuto) {
+            autoEnhance()
+            return
+        }
         val before = session.current
         var applied = false
         var appliedLutName: String? = null
@@ -476,6 +508,188 @@ class EditorViewModel(
         return true
     }
 
+    // ── 자동 보정 (NIMA) ──────────────────────────────────────────────────
+
+    /**
+     * The ✨ 자동 button and its spoken equivalents.
+     *
+     * Straightens the frame first when the photo is tilted, then asks the on-device NIMA model which
+     * direction raises the score and applies what it found as one removable step. The measured
+     * before/after scores travel with the result, so the card states the real change rather than
+     * claiming one.
+     */
+    fun autoEnhance() {
+        val current = _state.value
+        if (!current.loaded || current.busy != null) return
+        val preview = current.preview ?: return
+        scope.launch {
+            _state.update { it.copy(busy = "사진을 읽는 중…", nimaBusy = true) }
+
+            // 1) 수평·수직 — 기운 사진을 먼저 바로 세운다(점수 후보도 이 프레임 위에서 잰다).
+            val straight = withContext(Dispatchers.Default) { estimateStraight(preview) }
+            val currentDegrees = session.current[Param.STRAIGHTEN_DEG]
+            if (straight.isReliable && kotlin.math.abs(currentDegrees - straight.degrees) > 0.05f) {
+                session.apply(
+                    "자동 수평·수직",
+                    com.plenuen.lumen.core.RecipeDelta.set("수평", Param.STRAIGHTEN_DEG, straight.degrees),
+                )
+                _state.update { it.copy(straighten = straight) }
+            }
+            pushState()
+
+            // 2) NIMA 후보 탐색
+            _state.update { it.copy(busy = "NIMA 점수를 재는 중…") }
+            val engine = ensureEvaluator(preview, _state.value.lutBytes)
+            if (engine == null) {
+                applyRuleBasedAuto()
+                return@launch
+            }
+            val base = session.current
+            val baseScore = withContext(nimaThread) { engine.score(base) }
+            val result = withContext(nimaThread) {
+                NimaOptimizer.optimize(
+                    base = base,
+                    baseScore = baseScore,
+                    scorer = engine.scorer(),
+                    onProgress = { done, best ->
+                        if (done % 6 == 0) {
+                            _state.update {
+                                it.copy(
+                                    busy = "NIMA 후보 ${done}개 · 지금 최고 ${NimaScores.format(best)}",
+                                )
+                            }
+                        }
+                    },
+                )
+            }
+
+            if (result.improved) {
+                session.replace(result.recipe, "✨ 자동")
+                val gainText = String.format(java.util.Locale.US, "%+.2f", result.gain)
+                _state.update {
+                    it.copy(
+                        busy = null,
+                        nimaBusy = false,
+                        nimaScore = result.after,
+                        note = Note(
+                            "NIMA 미적 점수 ${NimaScores.format(result.before)} → " +
+                                "${NimaScores.format(result.after)} ($gainText)로 자동 보정했어요. " +
+                                "${result.summary()}를 조정했어요.",
+                            caption = "✨ 자동 보정",
+                        ),
+                        message = null,
+                        chips = (it.chips + "✨ 자동 $gainText").distinct().takeLast(8),
+                    )
+                }
+                pushState()
+                return@launch
+            }
+
+            val measured = result.after ?: result.before
+            val message = when {
+                measured == null -> "NIMA 점수를 재지 못했어요. 모델을 준비하지 못했습니다."
+                else -> "지금 사진이 이미 NIMA ${NimaScores.format(measured)}이라 억지로 건드리지 않았어요."
+            }
+            _state.update {
+                it.copy(
+                    busy = null,
+                    nimaBusy = false,
+                    nimaScore = measured ?: it.nimaScore,
+                    note = Note(message, caption = "✨ 자동 보정"),
+                    message = null,
+                )
+            }
+            pushState()
+        }
+    }
+
+    /** NIMA를 쓸 수 없을 때: 사진을 재 본 규칙(예쁘게)으로 최소한의 보정을 한다. */
+    private fun applyRuleBasedAuto() {
+        val stats = _state.value.scene
+        val before = session.current
+        session.apply("✨ 자동(규칙)", AestheticPlanner.plan(AestheticProfile.PRETTY, stats), 1f)
+        val sentence = EditNarrator.describe(before, session.current)
+        _state.update {
+            it.copy(
+                busy = null,
+                nimaBusy = false,
+                note = Note(
+                    (sentence ?: "사진에 맞춰 자동으로 보정했어요.") +
+                        " (NIMA 모델을 쓸 수 없어 사진 통계로 보정했어요.)",
+                    caption = "✨ 자동(규칙)",
+                ),
+                message = null,
+            )
+        }
+        pushState()
+    }
+
+    /**
+     * Makes sure one NIMA evaluator is open for the current photo. It owns an EGL context, so it is
+     * created, used and closed on [nimaThread] — never from the preview's GL thread.
+     */
+    private suspend fun ensureEvaluator(bitmap: Bitmap, lutBytes: ByteArray?): NimaEvaluator? =
+        withContext(nimaThread) {
+            val existing = evaluator
+            if (existing != null && existing.ready && evaluatorSource === bitmap) {
+                existing.updateLook(lutBytes)
+                return@withContext existing
+            }
+            runCatching { existing?.close() }
+            evaluator = null
+            evaluatorSource = null
+            val created = NimaEvaluator(appContext)
+            val opened = created.prepare(bitmap, _state.value.mask, lutBytes)
+            if (!opened) {
+                NimaEvaluator.logUnavailable(created.status)
+                created.close()
+                return@withContext null
+            }
+            evaluator = created
+            evaluatorSource = bitmap
+            created
+        }
+
+    /** Re-measures the NIMA score of the current recipe, debounced so slider drags stay smooth. */
+    private fun scheduleNimaScore(immediate: Boolean = false) {
+        val state = _state.value
+        if (!state.loaded || state.nimaBusy) return
+        val bitmap = state.preview ?: return
+        scoreJob?.cancel()
+        scoreJob = scope.launch {
+            if (!immediate) delay(700)
+            val engine = ensureEvaluator(bitmap, _state.value.lutBytes) ?: return@launch
+            val recipe = session.current
+            val score = withContext(nimaThread) { engine.score(recipe) } ?: return@launch
+            _state.update { it.copy(nimaScore = score) }
+        }
+    }
+
+    // ── 히스토리에서 한 스텝만 지우기 ──────────────────────────────────────
+
+    /**
+     * Lifts one step out of the history and re-adds the rest from the bottom line.
+     *
+     * The other steps keep their own changes, so removing "따뜻하게" as the second of three leaves
+     * the first and third exactly as they were. Undo brings the removed step back.
+     */
+    fun removeStep(id: Long) {
+        if (!_state.value.loaded) return
+        val step = session.steps().firstOrNull { it.id == id } ?: return
+        if (step.isOrigin) return
+        session.remove(id)
+        _state.update {
+            it.copy(
+                note = Note(
+                    "‘${step.title}’ 보정을 지웠어요. 나머지 ${session.steps().size - 1}단계는 그대로예요." +
+                        " 잘못 지웠으면 상단 ← 되돌리기로 되살릴 수 있어요.",
+                    caption = "보정 지우기",
+                ),
+            )
+        }
+        pushState()
+    }
+
     // ── 수동 조정 ─────────────────────────────────────────────────────────
 
     fun setParam(param: Param, value: Float) {
@@ -686,6 +900,11 @@ class EditorViewModel(
     fun release() {
         llm.close()
         maskGenerator.close()
+        scoreJob?.cancel()
+        runCatching { evaluator?.close() }
+        evaluator = null
+        evaluatorSource = null
+        runCatching { nimaThread.close() }
     }
 
     // ── 내부 ──────────────────────────────────────────────────────────────
@@ -697,9 +916,11 @@ class EditorViewModel(
                 recipe = recipe,
                 canUndo = session.canUndo,
                 canRedo = session.canRedo,
-                historyLabels = session.history.map { step -> step.label },
+                historyLabels = session.titleList,
+                steps = session.steps().map { step -> StepView(step.id, step.title, step.isOrigin) },
             )
         }
+        scheduleNimaScore()
     }
 
     private fun analyze(bitmap: Bitmap): SceneStats {

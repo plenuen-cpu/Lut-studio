@@ -5,6 +5,8 @@ photo ──▶ EditRecipe(불변 상태) ──▶ PhotoProgram(GLES 3.0) ─�
               ▲                    ▲
               │                    └── LUT 17³ 3D 텍스처
    자연어 파서 ─ 로컬 LLM ─ 사진 분석(히스토그램) ─ 기울기 추정
+                          │
+                          └── NIMA(224px 오프스크린 렌더 → TFLite 채점) ──▶ 자동 보정 후보 탐색
 ```
 
 ## 1. 상태
@@ -14,8 +16,11 @@ photo ──▶ EditRecipe(불변 상태) ──▶ PhotoProgram(GLES 3.0) ─�
   `toJson/fromJson`. 기본값과 같은 항목은 JSON에 쓰지 않습니다.
 - `core/RecipeDelta.kt` — 상태가 아니라 **변경 설명**. `Add`(상대)와 `Set`(목표) 두 가지.
   `Set`은 현재 값에서 목표로 강도만큼 보간하므로 "절반만 흑백" 같은 표현이 자연스럽습니다.
-- `core/RecipeSession.kt` — 레시피 스택. undo/redo/reset, 직전 단계 반복(`repeatLast`),
-  강도 절반 재계산(`halveLast`). 최대 200단계.
+- `core/RecipeSession.kt` — 레시피 **레이어 스택**. 각 레이어(`EditStep`)는 자기가 바꾼 것만 들고
+  있습니다: 말로 한 보정은 `RecipeDelta`(상대), 룩·슬라이더·자동은 그때 정한 절대값(`targets`).
+  그래서 `remove(id)`가 가운데 단계를 빼고 나머지를 원본부터 다시 합산할 수 있습니다.
+  undo/redo는 레이어 목록 스냅샷이라 잘못 지운 단계도 되살아납니다. 직전 단계 반복(`repeatLast`),
+  강도 절반 재계산(`halveLast`). 최대 200단계 / 되돌리기 100회.
 
 원본 `Bitmap`은 어디에서도 수정되지 않습니다. 프리뷰용 축소본과 저장용 원본을 따로 디코드하고,
 둘 다 같은 레시피를 셰이더에 넘깁니다.

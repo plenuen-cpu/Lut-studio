@@ -45,6 +45,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -82,9 +83,10 @@ import com.plenuen.lumen.data.LutPreset
 import com.plenuen.lumen.gl.PhotoRenderer
 import com.plenuen.lumen.gl.RenderSpec
 import com.plenuen.lumen.llm.LlmModels
+import com.plenuen.lumen.nima.NimaScores
 
 private val QUICK_PROMPTS = listOf(
-    "부드럽게", "따뜻하게", "영화처럼", "필름처럼", "청량하게", "흑백으로", "예쁘게", "샤하게",
+    "자동 보정", "NIMA 높여줘", "부드럽게", "따뜻하게", "영화처럼", "필름처럼", "청량하게", "흑백으로", "예쁘게", "샤하게",
     "꾸안꾸", "포인트 있게", "눈에 띄게", "너무 화려하지는 않게", "수평 맞춰줘",
     "인물만 화사하게", "배경만 어둡게", "하늘만 파랗게", "빨강만 살리고 초록은 차분하게",
 )
@@ -137,8 +139,11 @@ fun EditorScreen(
                     Column {
                         Text("루멘", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
                         Text(
-                            if (state.loaded) "${state.imageWidth}×${state.imageHeight} · 비파괴 편집"
-                            else "자연어로 사진 보정",
+                            if (state.loaded) {
+                                "${state.imageWidth}×${state.imageHeight} · NIMA ${NimaScores.format(state.nimaScore)}"
+                            } else {
+                                "자연어로 사진 보정"
+                            },
                             fontSize = 11.sp,
                             color = LumenPalette.TextDim,
                         )
@@ -296,20 +301,48 @@ fun EditorScreen(
                 }
 
                 if (!keyboardVisible) {
-                    // 적용된 보정 칩
+                    // 적용된 보정 히스토리 — 칩 하나가 보정 한 단계다. 누르면 그 단계만 빠지고
+                    // 나머지 단계는 그대로 다시 합산된다(맨 아래 '원본'은 남는다).
                     LazyRow(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        if (state.chips.isEmpty() && state.loaded) {
+                        if (state.steps.isEmpty() && state.loaded) {
                             item { Text("보정 없음", color = LumenPalette.TextDim, fontSize = 11.sp) }
                         }
-                        items(state.chips) { chip ->
-                            AssistChip(onClick = { }, label = { Text(chip, fontSize = 11.sp) })
+                        items(state.steps, key = { it.id }) { step ->
+                            if (step.isOrigin) {
+                                AssistChip(
+                                    onClick = { },
+                                    label = { Text(step.title, fontSize = 11.sp) },
+                                )
+                            } else {
+                                InputChip(
+                                    selected = false,
+                                    onClick = { viewModel.removeStep(step.id) },
+                                    label = { Text(step.title, fontSize = 11.sp) },
+                                    trailingIcon = {
+                                        Icon(
+                                            Icons.Filled.Close,
+                                            contentDescription = "이 보정 지우기",
+                                            modifier = Modifier.width(14.dp).height(14.dp),
+                                            tint = LumenPalette.TextDim,
+                                        )
+                                    },
+                                )
+                            }
                         }
                         if (state.recipe.lutIndex() >= 0 && state.lut != null) {
                             item { AssistChip(onClick = viewModel::toggleSliders, label = { Text("룩 ${state.lut?.display ?: ""}", fontSize = 11.sp) }) }
                         }
+                    }
+                    if (state.loaded && state.steps.size > 2) {
+                        Text(
+                            "보정 칩을 누르면 그 단계만 지워져요 · 상단 ← 되돌리기",
+                            fontSize = 10.sp,
+                            color = LumenPalette.TextDim,
+                            modifier = Modifier.padding(start = 16.dp, bottom = 2.dp),
+                        )
                     }
 
                     // 빠른 요청
@@ -373,6 +406,17 @@ fun EditorScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        // NIMA 기반 자동 보정: 누르면 점수 변화와 바뀐 파라미터가 카드에 뜬다.
+                        Button(
+                            onClick = viewModel::autoEnhance,
+                            enabled = state.loaded && !state.nimaBusy,
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                horizontal = 12.dp,
+                                vertical = 6.dp,
+                            ),
+                        ) {
+                            Text(if (state.nimaBusy) "자동…" else "✨ 자동", fontSize = 12.sp)
+                        }
                         FilledTonalButton(onClick = { viewModel.autoStraighten() }, enabled = state.loaded) {
                             Text("자동 수평·수직", fontSize = 12.sp)
                         }
