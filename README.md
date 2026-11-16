@@ -13,10 +13,10 @@
 최신 APK: <https://github.com/plenuen-cpu/Lut-studio/releases/latest>
 
 - `Lumen-2.1.0.apk` — release 빌드(디버그 키로 서명, 바로 설치 가능)
-- `Lumen-2.1.0-debug.apk` — debug 빌드
 
 2.1부터는 온디바이스 인물 분리 모델(`assets/models/selfie_multiclass_256x256.tflite`, 16MB)과
 MediaPipe Vision 라이브러리가 APK에 함께 들어 있어 용량이 66MB로 늘었습니다. 네트워크는 쓰지 않습니다.
+(debug 빌드는 저장소 릴리스에 올리지 않았습니다 — `gradle :app:assembleDebug`로 만들 수 있습니다.)
 
 설치 후 갤러리에서 사진을 고르면 됩니다. 서명 키가 빌드마다 같지 않을 수 있으므로,
 이미 설치된 Lumen이 있으면 먼저 삭제하고 설치하세요. (패키지 이름이 `com.plenuen.filmcam`인
