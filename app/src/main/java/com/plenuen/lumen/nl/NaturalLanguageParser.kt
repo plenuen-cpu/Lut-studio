@@ -137,7 +137,8 @@ object NaturalLanguageParser {
         "그거 있잖아요", "그거 있죠", "있잖아요", "있죠", "그런 거 있잖아요", "그런 느낌", "이런 느낌",
         "좋겠어요", "좋겠다", "좋을 것 같", "좋았으면", "했으면 좋겠", "하면 좋겠", "으면 좋겠",
         "부탁해요", "부탁해", "해주세요", "해줘요", "해줘", "해봐요", "해봐", "해주고",
-        "살리게", "살리는", "살려", "살리", "줄이게", "줄여", "없애",
+        "살리게", "살리는", "살려줘", "살려주세요", "살려", "살리", "줄이게", "줄여줘", "줄여", "없애",
+        "없애줘", "잡아줘", "해보자",
         "뭐랄까", "뭔가요", "뭔가", "뭐지", "뭐랄", "약간 그런", "뭐 그런", "그런", "이런", "저런",
         "조런", "요런", "머", "뭐", "뭘", "뭐가", "뭣",
         "그거", "그게", "그건", "그걸", "그럼", "그러면", "거기", "거기에", "거긴", "거길",
@@ -211,8 +212,9 @@ object NaturalLanguageParser {
         "았으면", "었는데", "았는데", "스럽게", "하면서", "처럼", "같이", "하게", "되게",
         "으면", "는데", "지만", "해서", "해도", "하고", "하면", "이고", "이라", "까지",
         "부터", "보다", "에서", "에게", "에는", "에도", "으로", "정도", "만큼",
+        "한데", "하되", "하니", "해서는", "어서", "아서",
         "랑", "만", "은", "는", "이", "가", "을", "를", "에", "의", "도", "면", "서", "고",
-        "지", "요", "죠", "네", "다", "까", "며", "게", "어", "아", "여", "워", "해", "했",
+        "지", "요", "죠", "네", "다", "까", "며", "게", "어", "아", "여", "워", "해", "했", "줘",
         "한", "할", "함", "임", "든", "던",
     ).sortedByDescending { it.length }
 
@@ -373,10 +375,13 @@ object NaturalLanguageParser {
 
     // ── 부정·억제 ─────────────────────────────────────────────────────────
 
+    /** Exclusions replace or leave out a look; they are not limits on a colour. */
+    private val EXCLUSION_MARKERS = listOf("말고", "말구", "빼고", "빼", "말", "마")
+
     /**
      * Reads every negated stretch of the sentence: the words in front of the negation marker say
-     * what is being limited. A known limit ("화려", "칙칙", "비네팅") becomes a [Restraint]; an
-     * ordinary look ("부드럽게 말고") becomes its own inverse, so the sentence still moves.
+     * what is being limited. A known limit ("화려", "칙칙", "비네팅") becomes a [Restraint]; a
+     * look the user leaves out ("부드럽게 말고") becomes its own inverse, so the sentence still moves.
      */
     private fun scanRestraints(text: String, consumed: BooleanArray): List<RestraintHit> {
         val out = mutableListOf<RestraintHit>()
@@ -384,6 +389,7 @@ object NaturalLanguageParser {
         for (match in NEGATION.findAll(text)) {
             val markerAt = match.range.first
             val markerEnd = match.range.last + 1
+            val marker = match.value.replace(" ", "").trim()
             if (overlaps(consumed, markerAt, markerEnd - markerAt)) continue
             val windowStart = (markerAt - LOOK_BACK).coerceAtLeast(0)
             // "과하지는"처럼 어간의 마지막 글자가 표시에 붙어 있어도 찾도록 표시 앞 두 글자까지 본다.
@@ -399,23 +405,25 @@ object NaturalLanguageParser {
                 continue
             }
 
-            val look = nearestIntent(text, windowStart, searchEnd, markerAt, consumed)
-            if (look != null) {
-                val (intent, phrase, at) = look
-                mark(consumed, at, markerEnd - at)
-                val inverse = intent.delta.negated().scaled(EXCLUSION_STRENGTH)
-                if (!inverse.isEmpty || !intent.delta.isEmpty) {
-                    val exclusion = Restraint(
-                        key = "exclude_${intent.key}",
-                        label = "${intent.label} 빼고",
-                        phrases = emptyList(),
-                        delta = inverse.takeUnless { it.isEmpty },
-                    )
-                    if (seen.add(exclusion.key)) {
-                        out += RestraintHit(exclusion, phrase, at, excluded = true)
+            if (EXCLUSION_MARKERS.any { marker.endsWith(it) }) {
+                val look = nearestIntent(text, windowStart, searchEnd, markerAt, consumed)
+                if (look != null) {
+                    val (intent, phrase, at) = look
+                    mark(consumed, at, markerEnd - at)
+                    val inverse = intent.delta.negated().scaled(EXCLUSION_STRENGTH)
+                    if (!inverse.isEmpty || !intent.delta.isEmpty) {
+                        val exclusion = Restraint(
+                            key = "exclude_${intent.key}",
+                            label = "${intent.label} 빼고",
+                            phrases = emptyList(),
+                            delta = inverse.takeUnless { it.isEmpty },
+                        )
+                        if (seen.add(exclusion.key)) {
+                            out += RestraintHit(exclusion, phrase, at, excluded = true)
+                        }
                     }
+                    continue
                 }
-                continue
             }
 
             // 무엇을 부정하는지 모르겠으면 표시만 해 둔다 ("~하지는 않은"의 꼬리).
@@ -436,11 +444,41 @@ object NaturalLanguageParser {
             val at = lastOccurrence(text, phrase, windowStart, searchEnd) ?: continue
             if (overlaps(consumed, at, phrase.length)) continue
             if (!belongsToMarker(at, phrase.length, markerAt)) continue
+            // "야경 노이즈 없이"처럼 더 긴 룩 이름의 일부라면 룩 쪽이 이긴다.
+            if (insideLongerIntent(text, at, phrase.length, consumed)) continue
             val end = at + phrase.length
             val bestEnd = best?.let { it.third + it.second.length } ?: -1
             if (end > bestEnd) best = Triple(restraint, phrase, at)
         }
         return best
+    }
+
+    /** True when a phrase of the intent catalog covers this stretch and is longer than it. */
+    private fun insideLongerIntent(
+        text: String,
+        at: Int,
+        length: Int,
+        consumed: BooleanArray,
+    ): Boolean {
+        val end = at + length
+        for ((phrase, _) in IntentCatalog.phraseIndex) {
+            if (phrase.length <= length) continue
+            var from = 0
+            while (true) {
+                val start = text.indexOf(phrase, from)
+                if (start < 0) break
+                val phraseEnd = start + phrase.length
+                val wholeWords = (start == 0 || text[start - 1] == ' ') &&
+                    (phraseEnd == text.length || text[phraseEnd] == ' ')
+                if (wholeWords && start <= at && phraseEnd >= end &&
+                    !overlaps(consumed, start, phrase.length)
+                ) {
+                    return true
+                }
+                from = start + 1
+            }
+        }
+        return false
     }
 
     private fun nearestIntent(

@@ -187,6 +187,26 @@ class ColloquialAndNegationTest {
         assertTrue(recipe[Param.CONTRAST] > 0f)
     }
 
+    /** 불평하듯 쓴 문장("칙칙한데 살려줘")과 "차갑게". */
+    @Test
+    fun complaintsAndColdAreUnderstood() {
+        assertTrue(apply("차갑게")[Param.TEMPERATURE] < -0.2f)
+
+        val dull = apply("칙칙한데 좀 살려줘")
+        assertTrue(dull[Param.EXPOSURE] > 0.1f)
+        assertTrue(dull[Param.SHADOWS] > 0.1f)
+        assertEquals("", NaturalLanguageParser.parse("칙칙한데 좀 살려줘").unmatched)
+    }
+
+    /** 더 긴 룩 이름이 부정 표시를 품고 있으면 룩이 이긴다("야경 노이즈 없이" = 야경을 깔끔하게). */
+    @Test
+    fun longerLookNameBeatsTheNegation() {
+        val parsed = NaturalLanguageParser.parse("야경 노이즈 없이")
+        assertEquals("night_clean", parsed.hits.single().intent.key)
+        assertTrue(parsed.restraints.isEmpty())
+        assertTrue(apply("야경 노이즈 없이")[Param.HALATION] <= 0f)
+    }
+
     // ── 말버릇 ──────────────────────────────────────────────────────────
 
     @Test

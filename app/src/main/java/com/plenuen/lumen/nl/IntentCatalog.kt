@@ -498,6 +498,27 @@ object IntentCatalog {
             summary = "색을 덜어내고 질감을 남겨 기록 사진처럼 만들었어요.",
         ),
 
+        Intent(
+            key = "cold", label = "차갑게",
+            phrases = listOf("차갑게", "차가운", "차갑", "시리하게", "얼음 같은", "한겨울 같"),
+            delta = d(
+                "차갑게",
+                add(P.TEMPERATURE, -0.22f), add(P.TINT, -0.05f), add(P.SATURATION, -0.05f),
+                add(P.CONTRAST, 0.05f), add(P.HIGHLIGHTS, -0.05f), add(P.DEHAZE, 0.05f),
+            ),
+            summary = "색온도를 낮추고 푸른 기운을 더해 차갑게 만들었어요.",
+        ),
+        Intent(
+            key = "dull_photo", label = "칙칙한 사진 살리기",
+            phrases = listOf("칙칙", "우중충", "무채색", "죽은 색", "꾸물"),
+            delta = d(
+                "칙칙한 사진 살리기",
+                add(P.EXPOSURE, 0.12f), add(P.SHADOWS, 0.14f), add(P.VIBRANCE, 0.12f),
+                add(P.WHITES, 0.05f), add(P.COLOR_HARMONY, 0.08f), add(P.FADE, -0.05f),
+            ),
+            summary = "노출과 중간톤을 올려 칙칙한 기운을 걷어 냈어요.",
+        ),
+
         // ── 구어체·감성 (SNS·사진 현장에서 쓰는 말) ───────────────────────────
         Intent(
             key = "shy_bright", label = "샤하게",
