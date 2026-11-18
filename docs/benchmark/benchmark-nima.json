@@ -2,14 +2,14 @@
   "scenes": 36,
   "nimaBase": 4.486,
   "nimaV225": 4.495,
-  "nimaV230": 4.513,
+  "nimaV230": 4.511,
   "deltaV225": 0.009,
-  "deltaV230": 0.027,
+  "deltaV230": 0.025,
   "clipV225": 0.0341,
-  "clipV230": 0.0338,
-  "v23BetterThanV225": 20,
-  "v225BetterThanV23": 15,
-  "bothAboveOriginal": 16,
+  "clipV230": 0.034,
+  "v23BetterThanV225": 17,
+  "v225BetterThanV23": 18,
+  "bothAboveOriginal": 12,
   "model": "app/src/main/assets/models/nima_aesthetic.tflite",
   "perScene": [
     {
@@ -61,11 +61,11 @@
       "category": "야경",
       "nimaBase": 5.321,
       "nimaV225": 5.327,
-      "nimaV230": 5.317,
+      "nimaV230": 5.321,
       "clipV225": 0.0031,
-      "clipV230": 0.0,
+      "clipV230": 0.0031,
       "deltaV225": 0.005,
-      "deltaV230": -0.004
+      "deltaV230": -0.0
     },
     {
       "name": "실내-1",
@@ -94,11 +94,11 @@
       "category": "저대비",
       "nimaBase": 3.888,
       "nimaV225": 3.888,
-      "nimaV230": 3.893,
+      "nimaV230": 3.888,
       "clipV225": 0.0,
       "clipV230": 0.0,
       "deltaV225": -0.001,
-      "deltaV230": 0.004
+      "deltaV230": -0.0
     },
     {
       "name": "색편향-1",
@@ -160,11 +160,11 @@
       "category": "야경",
       "nimaBase": 5.262,
       "nimaV225": 5.268,
-      "nimaV230": 5.253,
+      "nimaV230": 5.262,
       "clipV225": 0.0031,
-      "clipV230": 0.0,
+      "clipV230": 0.0031,
       "deltaV225": 0.006,
-      "deltaV230": -0.009
+      "deltaV230": 0.0
     },
     {
       "name": "실내-2",
@@ -193,22 +193,22 @@
       "category": "저대비",
       "nimaBase": 3.845,
       "nimaV225": 3.853,
-      "nimaV230": 3.852,
+      "nimaV230": 3.845,
       "clipV225": 0.0,
       "clipV230": 0.0,
       "deltaV225": 0.008,
-      "deltaV230": 0.007
+      "deltaV230": 0.0
     },
     {
       "name": "색편향-2",
       "category": "색편향",
       "nimaBase": 4.383,
       "nimaV225": 4.394,
-      "nimaV230": 4.402,
+      "nimaV230": 4.383,
       "clipV225": 0.0,
       "clipV230": 0.0,
       "deltaV225": 0.011,
-      "deltaV230": 0.02
+      "deltaV230": -0.0
     },
     {
       "name": "인물-3",
@@ -259,11 +259,11 @@
       "category": "야경",
       "nimaBase": 5.284,
       "nimaV225": 5.302,
-      "nimaV230": 5.313,
+      "nimaV230": 5.284,
       "clipV225": 0.0031,
       "clipV230": 0.0031,
       "deltaV225": 0.018,
-      "deltaV230": 0.029
+      "deltaV230": -0.0
     },
     {
       "name": "실내-3",
@@ -292,11 +292,11 @@
       "category": "저대비",
       "nimaBase": 3.888,
       "nimaV225": 3.884,
-      "nimaV230": 3.884,
+      "nimaV230": 3.888,
       "clipV225": 0.0,
       "clipV230": 0.0,
       "deltaV225": -0.004,
-      "deltaV230": -0.004
+      "deltaV230": 0.0
     },
     {
       "name": "색편향-3",
@@ -358,11 +358,11 @@
       "category": "야경",
       "nimaBase": 5.32,
       "nimaV225": 5.329,
-      "nimaV230": 5.336,
+      "nimaV230": 5.32,
       "clipV225": 0.0031,
       "clipV230": 0.0031,
       "deltaV225": 0.009,
-      "deltaV230": 0.017
+      "deltaV230": 0.0
     },
     {
       "name": "실내-4",
@@ -391,22 +391,22 @@
       "category": "저대비",
       "nimaBase": 3.839,
       "nimaV225": 3.833,
-      "nimaV230": 3.836,
+      "nimaV230": 3.839,
       "clipV225": 0.0,
       "clipV230": 0.0,
       "deltaV225": -0.006,
-      "deltaV230": -0.003
+      "deltaV230": 0.0
     },
     {
       "name": "색편향-4",
       "category": "색편향",
       "nimaBase": 4.366,
       "nimaV225": 4.352,
-      "nimaV230": 4.391,
+      "nimaV230": 4.366,
       "clipV225": 0.0,
       "clipV230": 0.0,
       "deltaV225": -0.014,
-      "deltaV230": 0.025
+      "deltaV230": 0.0
     }
   ]
 }

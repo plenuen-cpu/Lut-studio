@@ -196,7 +196,26 @@ class QualityEvaluatorTest {
     }
 
     @Test
-    fun aGentleCorrectionPassesAndScoresAboveTheBaseline() {
+    fun aCorrectionThatRestoresTheSkyBeatsTheFramesOwnBaseline() {
+        // 과노출 풍경: 하이라이트를 되살리는 보정은 같은 가중합에서 확실히 이겨야 한다.
+        val overexposed = scene("과노출 풍경")
+        val recovery = EditRecipe.of(
+            Param.HIGHLIGHTS to -0.5f,
+            Param.EXPOSURE to -0.2f,
+        )
+        val base = PixelSample(overexposed.argb, size, size, overexposed.subject, overexposed.sky)
+        val diagnosis = PhotoDiagnosisEngine.diagnose(overexposed.argb, size, size, overexposed.subject, overexposed.sky)
+        val baseline = QualityEvaluator.baseline(base, diagnosis, ProxyAesthetic.score(overexposed.argb, size, size))
+        val report = report(overexposed, recovery)
+        assertTrue("하늘을 되살린 보정은 통과해야 한다 (${report.rejected})", report.accepted)
+        assertTrue("기준선보다 높아야 한다 ${baseline.total} → ${report.total}", report.total > baseline.total + 0.05f)
+        assertTrue("과보정 정도가 낮아야 한다 ${report.meanChange}", report.meanChange < 0.10f)
+    }
+
+    @Test
+    fun aCorrectionThatCostsMoreThanItLeavesDoesNotBeatTheFramesOwnBaseline() {
+        // 게이트는 통과하지만(사진이 망가지지는 않았지만) 실제로 나아진 것이 없는 보정.
+        // 기준선이 0.5로 고정돼 있을 때는 이런 후보가 "개선"으로 받아들여졌다.
         val portrait = scene("인물")
         val gentle = EditRecipe.of(
             Param.EXPOSURE to 0.10f,
@@ -208,9 +227,11 @@ class QualityEvaluatorTest {
         val diagnosis = PhotoDiagnosisEngine.diagnose(portrait.argb, size, size, portrait.subject, portrait.sky)
         val baseline = QualityEvaluator.baseline(base, diagnosis, ProxyAesthetic.score(portrait.argb, size, size))
         val report = report(portrait, gentle)
-        assertTrue("자연스러운 보정은 통과해야 한다 (${report.rejected})", report.accepted)
-        assertTrue("기준선보다 높아야 한다 ${baseline.total} → ${report.total}", report.total > baseline.total)
-        assertTrue("과보정 정도가 낮아야 한다 ${report.meanChange}", report.meanChange < 0.08f)
+        assertNull("게이트에 걸리지는 않는다", report.rejected)
+        assertTrue(
+            "모델이 나아졌다고 하지 않았으니 제자리 사진을 이기지 못해야 한다 ${baseline.total} → ${report.total}",
+            report.total <= baseline.total,
+        )
     }
 
     @Test
@@ -223,6 +244,47 @@ class QualityEvaluatorTest {
         assertTrue("가까운 변화가 더 작아야 한다", nearDistance < farDistance)
         assertEquals("변화 없음은 0", 0f, QualityEvaluator.recipeDistance(base, base), 0.0001f)
         assertEquals("최대값은 1", 1f, QualityEvaluator.recipeDistance(base, far), 1e-4f)
+    }
+
+    // ── 기준선은 "아무것도 바꾸지 않은 사진"의 실제 점수다 ────────────────
+
+    @Test
+    fun theBaselineIsScoredWithTheSameFormulaAsACandidate() {
+        val portrait = scene("인물")
+        val base = PixelSample(portrait.argb, size, size, portrait.subject, portrait.sky)
+        val diagnosis = PhotoDiagnosisEngine.diagnose(portrait.argb, size, size, portrait.subject, portrait.sky)
+        val nima = ProxyAesthetic.score(portrait.argb, size, size)
+        val baseline = QualityEvaluator.baseline(base, diagnosis, nima)
+
+        // 같은 프레임을 후보로 넣어도 기준선과 똑같이 계산돼야 한다(동일 인스턴스 지름길 없음).
+        val sameFrame = PixelSample(portrait.argb, size, size, portrait.subject, portrait.sky)
+        val asCandidate = QualityEvaluator.evaluate(
+            base = base,
+            candidate = sameFrame,
+            baseRecipe = EditRecipe.NEUTRAL,
+            candidateRecipe = EditRecipe.NEUTRAL,
+            diagnosis = diagnosis,
+            nima = nima,
+            nimaBase = nima,
+        )
+        assertEquals("기준선과 같은 프레임 후보의 총점", baseline.total, asCandidate.total, 1e-6f)
+        assertTrue("기준선은 0.5 고정값이 아니라 측정값이어야 한다 (${baseline.total})", baseline.total > 0.65f)
+        assertEquals("움직이지 않았으니 NIMA 몫은 중립", 0.5f, baseline.nimaPart, 1e-6f)
+        assertEquals("클리핑이 없으면 만점", 1f, baseline.clipPart, 1e-6f)
+        assertEquals("움직이지 않았으니 절제 몫은 만점", 1f, baseline.restraintPart, 1e-6f)
+        assertNull("기준선은 후보가 아니므로 탈락 사유가 없다", baseline.rejected)
+    }
+
+    @Test
+    fun theBaselineOfAPhotoThatIsAlreadyBrokenIsMeasuredNotRejected() {
+        // 하늘이 이미 날아간 사진도 기준선에서는 "그 사진의 점수"다. 탈락은 후보에게만 적용된다.
+        val overexposed = scene("과노출 풍경")
+        val base = PixelSample(overexposed.argb, size, size, overexposed.subject, overexposed.sky)
+        val diagnosis = PhotoDiagnosisEngine.diagnose(overexposed.argb, size, size, overexposed.subject, overexposed.sky)
+        val baseline = QualityEvaluator.baseline(base, diagnosis, ProxyAesthetic.score(overexposed.argb, size, size))
+        assertNull("이미 날아간 하늘도 기준선에서는 탈락이 아니다 (${baseline.rejected})", baseline.rejected)
+        assertTrue("클리핑이 있으니 클리핑 몫이 깎인다 (${baseline.clipPart})", baseline.clipPart < 0.6f)
+        assertTrue("깨끗한 프레임의 기준선보다 낮아야 한다 (${baseline.total})", baseline.total < 0.65f)
     }
 }
 
@@ -334,6 +396,20 @@ class RecipeSearchTest {
             "최종 레시피가 모델만 좋아하는 후보여서는 안 된다",
             outcome.recipe[Param.EXPOSURE] < 0.85f,
         )
+    }
+
+    @Test
+    fun theSearchOnlyAppliesWhatBeatsThePhotoItself() {
+        // 기준선이 0.5로 고정돼 있던 때는 무엇이든 그보다 높으면 적용됐다. 이제는 사진 자신의
+        // 점수를 넘어야 하므로, 넘는 후보가 없는 장면은 그대로 둔다(억지 보정 없음).
+        val flat = scene("저대비")
+        val outcome = search(flat)
+        assertNotNull(outcome.baseQuality)
+        assertTrue(
+            "기준선은 0.5가 아니라 측정값이어야 한다 (${outcome.baseQuality!!.total})",
+            outcome.baseQuality!!.total > 0.65f,
+        )
+        assertEquals("이기는 후보가 없으면 레시피를 건드리지 않는다", EditRecipe.NEUTRAL, outcome.recipe)
     }
 
     @Test

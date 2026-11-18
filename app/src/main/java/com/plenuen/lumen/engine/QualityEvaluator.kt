@@ -15,12 +15,24 @@ import kotlin.math.min
  * construction, because a search compares dozens of candidates against the same two frames.
  */
 class PixelSample(
-    val argb: IntArray,
+    argb: IntArray,
     val width: Int,
     val height: Int,
+    /** Read-only region weights; the caller keeps ownership and never rewrites them. */
     val subject: FloatArray? = null,
     val sky: FloatArray? = null,
 ) {
+    /**
+     * An owned copy of the frame, never the caller's buffer.
+     *
+     * The renderer that produced these pixels hands back the same array on the next draw — that is
+     * what makes sixty candidates cheap — so a sample that kept the reference would silently become
+     * the *last* candidate: the baseline's own clipping, colour and pixel-change readings would
+     * drift with every render. Copying here makes every sample an immutable snapshot, whichever
+     * caller builds it.
+     */
+    val argb: IntArray = argb.copyOf()
+
     init {
         require(argb.size >= width * height || argb.isEmpty()) {
             "pixel buffer too small: ${argb.size} < ${width * height}"
@@ -347,7 +359,7 @@ object QualityEvaluator {
         nima: Float?,
         nimaBase: Float?,
     ): QualityReport {
-        if (base === candidate || base.pixels == 0 || candidate.pixels == 0) {
+        if (base.pixels == 0 || candidate.pixels == 0) {
             return QualityReport(
                 nima = nima, nimaPart = 0.5f, clipPart = 0.5f, colorPart = 0.5f, skinPart = 0.5f,
                 separationPart = 0.5f, scenePart = 0.5f, restraintPart = 1f, total = 0.5f,
@@ -355,7 +367,28 @@ object QualityEvaluator {
                 highlightClip = 0f, shadowClip = 0f, meanSaturation = 0f, separation = null,
             )
         }
+        return score(base, candidate, baseRecipe, candidateRecipe, diagnosis, nima, nimaBase, reference = false)
+    }
 
+    /**
+     * Scores [candidate] against [base] with the seven weighted parts and the hard gates.
+     *
+     * [reference] marks the frame's own report — the "nothing changed" baseline. It goes through
+     * exactly the same arithmetic as a candidate (only the comparison side is itself), so the two
+     * totals are on one scale; the gates are left out because they describe a *proposal* that made
+     * the picture worse and the baseline is not a proposal. A frame that already clips or is already
+     * oversaturated is measured, not thrown away: that is what the search has to beat.
+     */
+    private fun score(
+        base: PixelSample,
+        candidate: PixelSample,
+        baseRecipe: EditRecipe,
+        candidateRecipe: EditRecipe,
+        diagnosis: PhotoDiagnosis,
+        nima: Float?,
+        nimaBase: Float?,
+        reference: Boolean,
+    ): QualityReport {
         val highlightClip = candidate.highlightClip
         val shadowClip = candidate.shadowClip
         val meanChange = meanLumaChange(base.argb, candidate.argb)
@@ -368,7 +401,7 @@ object QualityEvaluator {
         val castGrowth = castOf(candidate) - castOf(base)
 
         // ── 하드 탈락 게이트: 점수를 보기 전에 사진이 망가졌는지 먼저 본다 ──────────
-        val rejection = when {
+        val rejection = if (reference) null else when {
             highlightClip - base.highlightClip > MAX_HIGHLIGHT_GROWTH &&
                 highlightClip > base.highlightClip * MAX_HIGHLIGHT_RATIO -> Rejection.HIGHLIGHT_CLIP
             shadowClip - base.shadowClip > MAX_SHADOW_GROWTH &&
@@ -436,9 +469,15 @@ object QualityEvaluator {
         )
     }
 
-    /** The neutral frame's own report, used as the "nothing changed" baseline. */
+    /**
+     * The frame's own report, used as the "nothing changed" baseline.
+     *
+     * Same weights and same component formulas as a candidate, so "this candidate beats the photo"
+     * means what it says. A fixed placeholder here (0.5) let the search accept any correction that
+     * merely looked better than a number nobody had measured.
+     */
     fun baseline(base: PixelSample, diagnosis: PhotoDiagnosis, nima: Float?): QualityReport =
-        evaluate(base, base, EditRecipe.NEUTRAL, EditRecipe.NEUTRAL, diagnosis, nima, nima)
+        score(base, base, EditRecipe.NEUTRAL, EditRecipe.NEUTRAL, diagnosis, nima, nima, reference = true)
 
     // ── 부분 점수 계산 ────────────────────────────────────────────────────
 

@@ -227,6 +227,8 @@ class EditorViewModel(
                     )
                 }
             }
+            // 영역 마스크가 생겼으니 지금 레시피의 점수도 마스크가 적용된 프레임으로 다시 잰다.
+            scheduleNimaScore(immediate = true)
         }
     }
 
@@ -492,6 +494,8 @@ class EditorViewModel(
             val guided = withContext(nimaThread) {
                 val basePixels = engine.renderPixels(base) ?: return@withContext null
                 val channels = maskChannels(_state.value.mask, RecipeSearch.NIMA_SIDE)
+                // PixelSample이 픽셀을 복사해 가진다: renderPixels가 주는 배열은 다음 후보 렌더가
+                // 덮어쓰는 재사용 버퍼라, 기준선은 그대로 두면 마지막 후보가 되어 버린다.
                 val sample = PixelSample(
                     argb = basePixels,
                     width = RecipeSearch.NIMA_SIDE,
@@ -627,6 +631,10 @@ class EditorViewModel(
             val existing = evaluator
             if (existing != null && existing.ready && evaluatorSource === bitmap) {
                 existing.updateLook(lutBytes)
+                // 마스크는 사진을 연 뒤에 만들어진다. 평가기가 먼저 열렸다면 지금 올려야 영역 보정
+                // 후보가 실제 프리뷰와 같은 프레임(마스크 적용)으로 평가된다.
+                val mask = _state.value.mask
+                if (existing.maskBitmap !== mask) existing.updateMask(mask)
                 return@withContext existing
             }
             runCatching { existing?.close() }

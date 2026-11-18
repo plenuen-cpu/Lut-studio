@@ -73,6 +73,25 @@ class NimaEvaluator(private val context: Context) : Closeable {
         this.lutBytes = lutBytes
     }
 
+    /** The mask the offscreen pass draws with, or null when the photo has none (yet). */
+    val maskBitmap: Bitmap? get() = mask
+
+    /**
+     * Hands the renderer a region mask that was built after [prepare].
+     *
+     * Segmentation runs in the background and can finish after the first score request, so the
+     * evaluator may have been opened before there was a mask. Uploading it here (rather than
+     * re-opening the session) is what makes a region candidate scored the same way the preview
+     * draws it. Returns false when the session is closed, so the caller can drop and rebuild it.
+     */
+    fun updateMask(mask: Bitmap?): Boolean {
+        if (this.mask === mask) return true
+        val renderSession = session ?: return false
+        val uploaded = renderSession.updateMask(mask)
+        if (uploaded) this.mask = mask
+        return uploaded
+    }
+
     /** NIMA 미적 점수(1~10). 준비가 안 됐거나 추론이 실패하면 null. */
     fun score(recipe: com.plenuen.lumen.core.EditRecipe): Float? {
         val pixels = renderPixels(recipe) ?: return null
@@ -84,6 +103,10 @@ class NimaEvaluator(private val context: Context) : Closeable {
      *
      * v2.3 needs the pixels as well as the score: the quality evaluator measures clipping, colour,
      * skin and subject separation on exactly the frame the model judged.
+     *
+     * The array belongs to the render session and the next [renderPixels] overwrites it in place.
+     * Keep it only through an owner that copies ([com.plenuen.lumen.engine.PixelSample] does), never
+     * by holding the reference — the baseline of a search is read after seventy more renders.
      */
     fun renderPixels(recipe: com.plenuen.lumen.core.EditRecipe): IntArray? {
         val renderSession = session ?: return null
