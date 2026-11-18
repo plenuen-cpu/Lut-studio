@@ -145,6 +145,16 @@ object EditNarrator {
                 "하고",
                 "했어요",
             )
+            Param.SKY_DETAIL -> amount("하늘 디테일을", pct, up, UP_P, UP_PAST, DOWN_P, DOWN_PAST)
+
+            // ── v2.3: 피사체·배경 세부와 국소 톤 ──
+            Param.SUBJECT_CONTRAST -> amount("피사체 대비를", pct, up, UP_P, UP_PAST, DOWN_P, DOWN_PAST)
+            Param.SUBJECT_STRUCTURE -> amount("피사체 입체감을", pct, up, UP_P, UP_PAST, DOWN_P, DOWN_PAST)
+            Param.SUBJECT_SKIN_PROTECT -> amount("피부톤 보호를", pct, up, "넣고", "넣었어요", "빼고", "뺐어요")
+            Param.BACKGROUND_HIGHLIGHTS -> amount("배경 하이라이트를", pct, up, UP_P, UP_PAST, DOWN_P, DOWN_PAST)
+            Param.TONE_SHADOW_CURVE -> amount("섀도우 톤을", pct, up, UP_P, UP_PAST, DOWN_P, DOWN_PAST)
+            Param.TONE_MID_CURVE -> amount("미드톤을", pct, up, UP_P, UP_PAST, DOWN_P, DOWN_PAST)
+            Param.TONE_HIGH_CURVE -> amount("하이라이트 톤을", pct, up, UP_P, UP_PAST, DOWN_P, DOWN_PAST)
 
             // ── 8색 HSL ──
             Param.RED_HUE, Param.ORANGE_HUE, Param.YELLOW_HUE, Param.GREEN_HUE,

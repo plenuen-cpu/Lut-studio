@@ -40,6 +40,8 @@ class NimaRenderSession {
     private var height = 0
     private var pixels = IntArray(0)
     private var pixelBuffer: ByteBuffer? = null
+    /** True when a region mask (R = subject, G = sky) is uploaded and the shader may use it. */
+    private var hasMask = false
 
     val isOpen: Boolean get() = framebuffer != 0 && program?.isCompiled == true
 
@@ -90,6 +92,7 @@ class NimaRenderSession {
             height = NimaScores.INPUT_SIZE
             GLES30.glGenTextures(4, textures, 0)
             PhotoProgram.uploadBitmap(source, textures[0])
+            hasMask = mask != null
             if (mask != null) {
                 PhotoProgram.uploadBitmap(mask, textures[3])
             } else {
@@ -132,6 +135,35 @@ class NimaRenderSession {
         }
     }
 
+    /**
+     * Uploads a region mask that arrived (or changed) after [open]. Call on the render thread.
+     *
+     * The mask is built off the UI thread and can land after the first score request, so without
+     * this the offscreen pass kept drawing candidates as if the photo had no regions — the search
+     * then chose subject/background/sky corrections it could not see and judged them on the
+     * unmasked frame. With the mask uploaded here, a candidate is drawn exactly as the preview shows
+     * it. Passing null (or the photo having no mask) keeps [hasMask] false, so `uMaskOn` stays 0.
+     */
+    fun updateMask(mask: Bitmap?): Boolean {
+        if (framebuffer == 0) return false
+        return runCatching {
+            if (mask != null) {
+                PhotoProgram.uploadBitmap(mask, textures[3])
+                hasMask = true
+            } else {
+                PhotoProgram.uploadBitmap(
+                    Bitmap.createBitmap(intArrayOf(0), 1, 1, Bitmap.Config.ARGB_8888),
+                    textures[3],
+                )
+                hasMask = false
+            }
+            true
+        }.getOrElse { error ->
+            Log.w("LumenNima", "mask upload failed: ${error.message}")
+            false
+        }
+    }
+
     /** Renders [recipe] and returns its 224×224 ARGB pixels, or null when the draw failed. */
     fun render(recipe: EditRecipe, lut: ByteArray?, sourceWidth: Int, sourceHeight: Int): IntArray? {
         val compiled = program ?: return null
@@ -153,7 +185,7 @@ class NimaRenderSession {
                     imageHeight = sourceHeight.coerceAtLeast(1),
                     compare = false,
                     splitEnabled = false,
-                    maskReady = false,
+                    maskReady = hasMask,
                     maskPreview = false,
                 ),
                 sourceTexture = textures[0],
@@ -230,6 +262,7 @@ class NimaRenderSession {
         context = EGL14.EGL_NO_CONTEXT
         surface = EGL14.EGL_NO_SURFACE
         lutBytes = null
+        hasMask = false
         pixels = IntArray(0)
         pixelBuffer = null
     }

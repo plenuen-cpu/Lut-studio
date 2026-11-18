@@ -2,6 +2,11 @@ package com.plenuen.lumen.nima
 
 import com.plenuen.lumen.core.EditRecipe
 import com.plenuen.lumen.core.Param
+import com.plenuen.lumen.engine.PhotoDiagnosis
+import com.plenuen.lumen.engine.RecipeSearch
+import com.plenuen.lumen.engine.SearchSpace
+import com.plenuen.lumen.engine.SearchOutcome
+import kotlin.math.abs
 
 /**
  * Scores a recipe by what it looks like. The app answers with the NIMA model; tests answer with a
@@ -19,7 +24,7 @@ data class NimaChange(val param: Param, val from: Float, val to: Float) {
     /** "+12%", "+0.12 EV", "−0.08" — the amount in the slider's own units. */
     fun amountText(): String {
         val sign = if (delta >= 0f) "+" else "−"
-        val size = kotlin.math.abs(delta)
+        val size = abs(delta)
         return when (param.suffix) {
             "EV" -> sign + String.format(java.util.Locale.US, "%.2f", size) + " EV"
             "°" -> sign + String.format(java.util.Locale.US, "%.1f", size) + "°"
@@ -36,6 +41,10 @@ data class NimaChange(val param: Param, val from: Float, val to: Float) {
  * [before] and [after] are the real NIMA scores measured around the change, so the card can say
  * "4.85 → 5.38 (+0.53)" instead of claiming an improvement. When nothing beat the photo as it was,
  * [changes] stays empty and the caller keeps the recipe.
+ *
+ * From v2.3 the pass can also be accepted on [qualityAfter] even when NIMA dips slightly — a sky
+ * that stops being white or a face that stays believable is worth a hundredth of a NIMA point — so
+ * [accepted] says so explicitly and [improved] honours it.
  */
 data class NimaAdjustment(
     val recipe: EditRecipe,
@@ -44,43 +53,60 @@ data class NimaAdjustment(
     val changes: List<NimaChange>,
     val evaluations: Int,
     val acceptedRounds: Int,
+    /** 다중 품질 평가 점수(0..1). 진단 기반 경로에서만 채워진다. */
+    val qualityBefore: Float? = null,
+    val qualityAfter: Float? = null,
+    /** true면 NIMA가 조금 내려도 품질 게이트를 통과해 채택된 결과다. */
+    val accepted: Boolean = false,
+    /** 사진 진단 요약 — 카드에 "역광 인물 · …"처럼 그대로 보여 준다. */
+    val diagnosis: String? = null,
+    /** 하드 게이트에 걸려 버려진 후보 수. */
+    val rejected: Int = 0,
+    val elapsedMs: Long = 0,
 ) {
     val gain: Float get() = if (before != null && after != null) after - before else 0f
-    val improved: Boolean get() = changes.isNotEmpty() && gain > 0f
+    val improved: Boolean get() = changes.isNotEmpty() && (gain > 0f || accepted)
 
     /** "노출 +0.12 EV, 대비 +9%, 활기 +7%" (가장 큰 변화 네 개). */
     fun summary(): String = changes.take(4).joinToString(", ") { it.text() }
 }
 
 /**
- * Finds the direction that raises the NIMA score, using the model itself as the judge.
+ * Finds the combination of adjustments that makes the photo best, using the model as one judge
+ * among several.
  *
- * A candidate ladder is walked from the current recipe (exposure, contrast, highlights, shadows,
- * whites, blacks, vibrance, saturation, clarity, temperature, texture, vignette — each way), the best
- * single move is kept, and the walk repeats from there with smaller steps. Every candidate is
- * rendered through the same shader as the preview and scored, so what wins here is what the user
- * actually sees — not a proxy.
+ * v2.2.5 walked a single ladder of parameters and kept the best single move per round, judged only
+ * by NIMA. v2.3 asks [com.plenuen.lumen.engine.CandidateGenerator] for whole recipes seeded by the
+ * photo's diagnosis, scores them with [com.plenuen.lumen.engine.QualityEvaluator] (model + clipping +
+ * colour + skin + separation + scene fit − over-correction), refines the best few with coordinate
+ * moves at two step sizes, and stops on both a call count and a clock so a phone stays responsive.
  *
- * Two things keep it from wrecking a photo. Each parameter has a ceiling on how far it may drift from
- * the recipe the user already had ([NimaGuardrails]), so a model that likes punchier frames cannot
- * push saturation to the top; and a round is only accepted if it buys [Settings.minGain], so a photo
- * that is already good is left alone instead of being fidgeted with.
+ * Two things keep it from wrecking a photo. Each parameter has a ceiling on how far it may drift
+ * from the recipe the user already had ([NimaGuardrails] and [com.plenuen.lumen.engine.RegionLimits]),
+ * so a model that likes punchier frames cannot push saturation to the top; and a candidate is only
+ * kept if it beats the frame's own baseline by [Settings.minGain], so a good photo is left alone.
  */
 object NimaOptimizer {
 
     data class Settings(
-        /** Ladders to walk after the first sweep. */
+        /** Refinement passes per finalist (kept from v2.2.5 for call-site compatibility). */
         val rounds: Int = 3,
-        /** A round must beat the current score by this much to be kept. */
+        /** A result must beat the current NIMA score by this much to be kept (score-only path). */
         val minGain: Float = 0.02f,
+        /** The same threshold in quality units (0..1) for the diagnosis-guided path. */
+        val qualityMinGain: Float = 0.004f,
         /** Hard ceiling on model evaluations, so a big photo cannot stall the UI. */
-        val budget: Int = 60,
+        val budget: Int = 72,
+        /** Wall-clock ceiling for the whole pass. */
+        val timeBudgetMs: Long = 6000,
     )
 
-    /** One candidate move: push [param] by [amount] in the direction being tried. */
+    /** One candidate move. Kept because v2.2.5 tests and diagnostics refer to the ladder. */
     data class Probe(val param: Param, val amount: Float)
 
-    /** Coarse sweep: the parameters a photograph usually answers to, at a visible size. */
+    /** The probes the v2.2.5 single-slider walk used; still reported for comparison. */
+    fun ladder(round: Int): List<Probe> = if (round <= 0) FIRST_SWEEP else REFINEMENT
+
     private val FIRST_SWEEP = listOf(
         Probe(Param.EXPOSURE, 0.12f),
         Probe(Param.CONTRAST, 0.10f),
@@ -96,7 +122,6 @@ object NimaOptimizer {
         Probe(Param.VIGNETTE, 0.08f),
     )
 
-    /** Refinement sweeps: fewer parameters, smaller moves, around the best point found. */
     private val REFINEMENT = listOf(
         Probe(Param.EXPOSURE, 0.07f),
         Probe(Param.CONTRAST, 0.06f),
@@ -108,24 +133,13 @@ object NimaOptimizer {
         Probe(Param.TEMPERATURE, 0.04f),
     )
 
-    private val FINAL_TOUCH = listOf(
-        Probe(Param.EXPOSURE, 0.04f),
-        Probe(Param.CONTRAST, 0.04f),
-        Probe(Param.HIGHLIGHTS, 0.04f),
-        Probe(Param.SHADOWS, 0.04f),
-        Probe(Param.VIBRANCE, 0.04f),
-        Probe(Param.SATURATION, 0.03f),
-        Probe(Param.CLARITY, 0.04f),
-        Probe(Param.TEMPERATURE, 0.03f),
-    )
-
-    /** The probes of each sweep, in the order they are tried. */
-    fun ladder(round: Int): List<Probe> = when (round) {
-        0 -> FIRST_SWEEP
-        1 -> REFINEMENT
-        else -> FINAL_TOUCH
-    }
-
+    /**
+     * The classic entry point: only a score function, no pixels.
+     *
+     * Runs the same multivariate search as the phone does, with the model guardrails as its space
+     * and the generic candidate table as its pool, so a caller that can only answer "what does NIMA
+     * think" still gets joint moves instead of a one-slider walk.
+     */
     fun optimize(
         base: EditRecipe,
         baseScore: Float? = null,
@@ -133,61 +147,83 @@ object NimaOptimizer {
         settings: Settings = Settings(),
         onProgress: (evaluations: Int, best: Float) -> Unit = { _, _ -> },
     ): NimaAdjustment {
-        var evaluations = 0
-        val startScore = baseScore ?: scorer.score(base)?.also { evaluations++ }
-        if (startScore == null) {
-            return NimaAdjustment(base, null, null, emptyList(), evaluations, 0)
-        }
-
-        var bestScore: Float = startScore
-        var best = base
-        var acceptedRounds = 0
-        val start = startScore
-
-        for (round in 0 until settings.rounds) {
-            if (evaluations >= settings.budget) break
-            var roundRecipe: EditRecipe? = null
-            var roundScore = bestScore
-            val probes = ladder(round)
-            for (probe in probes) {
-                for (direction in DIRECTION) {
-                    if (evaluations >= settings.budget) break
-                    val target = best[probe.param] + probe.amount * direction
-                    val candidate = best.with(probe.param, target)
-                    if (candidate == best) continue
-                    if (!NimaGuardrails.allows(probe.param, base[probe.param], candidate[probe.param])) continue
-                    val score = scorer.score(candidate) ?: continue
-                    evaluations++
-                    if (score > roundScore + 1e-4f) {
-                        roundScore = score
-                        roundRecipe = candidate
-                    }
-                }
-            }
-            if (roundRecipe == null || roundScore - bestScore < settings.minGain) break
-            best = roundRecipe
-            bestScore = roundScore
-            acceptedRounds++
-            onProgress(evaluations, bestScore)
-        }
-
-        val changes = Param.entries.mapNotNull { param ->
-            val from = base[param]
-            val to = best[param]
-            if (kotlin.math.abs(to - from) < 1e-4f) null else NimaChange(param, from, to)
-        }.sortedByDescending { kotlin.math.abs(it.delta) }
-
+        val outcome = RecipeSearch.searchScores(
+            base = base,
+            baseScore = baseScore,
+            scorer = { recipe -> scorer.score(recipe) },
+            settings = RecipeSearch.Settings(
+                maxEvaluations = settings.budget,
+                timeBudgetMs = settings.timeBudgetMs,
+                minGain = settings.minGain,
+                refinePasses = 2,
+            ),
+            space = SearchSpace.unguided(base),
+        )
+        val changes = changesOf(base, outcome.recipe)
+        if (changes.isNotEmpty()) onProgress(outcome.evaluations, outcome.bestNima ?: 0f)
         return NimaAdjustment(
-            recipe = if (changes.isEmpty()) base else best,
-            before = start,
-            after = if (changes.isEmpty()) start else bestScore,
+            recipe = outcome.recipe,
+            before = outcome.baseNima,
+            after = outcome.bestNima,
             changes = changes,
-            evaluations = evaluations,
-            acceptedRounds = acceptedRounds,
+            evaluations = outcome.evaluations,
+            acceptedRounds = if (changes.isEmpty()) 0 else 1,
+            elapsedMs = outcome.elapsedMs,
         )
     }
 
-    private val DIRECTION = floatArrayOf(1f, -1f)
+    /**
+     * The v2.3 path: the pass knows what the photo looks like and judges candidates on more than the
+     * model's score. [renderer] draws candidates through the preview's own shader at 224×224.
+     */
+    fun enhance(
+        base: EditRecipe,
+        baseNima: Float?,
+        diagnosis: PhotoDiagnosis,
+        renderer: RecipeSearch.Renderer,
+        settings: Settings = Settings(),
+        onProgress: (evaluations: Int, best: Float) -> Unit = { _, _ -> },
+    ): NimaAdjustment {
+        val outcome: SearchOutcome = RecipeSearch.search(
+            base = base,
+            diagnosis = diagnosis,
+            renderer = RecipeSearch.Renderer(
+                render = renderer.render,
+                nima = renderer.nima,
+                baseSample = renderer.baseSample,
+                baseNima = baseNima,
+                onProgress = { count, _ -> onProgress(count, 0f) },
+            ),
+            settings = RecipeSearch.Settings(
+                maxEvaluations = settings.budget,
+                timeBudgetMs = settings.timeBudgetMs,
+                minGain = settings.qualityMinGain,
+                refinePasses = 2,
+            ),
+        )
+        val changes = changesOf(base, outcome.recipe)
+        return NimaAdjustment(
+            recipe = outcome.recipe,
+            before = outcome.baseNima,
+            after = outcome.bestNima,
+            changes = changes,
+            evaluations = outcome.evaluations,
+            acceptedRounds = if (changes.isEmpty()) 0 else 1,
+            qualityBefore = outcome.baseQuality?.total,
+            qualityAfter = outcome.bestQuality?.total,
+            accepted = changes.isNotEmpty() && outcome.bestQuality?.accepted == true,
+            diagnosis = diagnosis.summary(),
+            rejected = outcome.rejected,
+            elapsedMs = outcome.elapsedMs,
+        )
+    }
+
+    private fun changesOf(base: EditRecipe, result: EditRecipe): List<NimaChange> =
+        Param.entries.mapNotNull { param ->
+            val from = base[param]
+            val to = result[param]
+            if (abs(to - from) < 1e-4f) null else NimaChange(param, from, to)
+        }.sortedByDescending { abs(it.delta) }
 }
 
 /**
@@ -231,6 +267,6 @@ object NimaGuardrails {
     /** True when [value] stays inside what this parameter is allowed to do to the photo. */
     fun allows(param: Param, base: Float, value: Float): Boolean {
         val limit = limits[param] ?: return false
-        return kotlin.math.abs(value - base) <= limit + 1e-4f
+        return abs(value - base) <= limit + 1e-4f
     }
 }

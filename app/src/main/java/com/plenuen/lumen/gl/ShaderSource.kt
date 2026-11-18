@@ -88,15 +88,25 @@ uniform float uSubExposure;   // 피사체
 uniform float uSubSaturation;
 uniform float uSubWarmth;
 uniform float uSubClarity;
+uniform float uSubContrast;   // 피사체 대비 (v2.3)
+uniform float uSubStructure;  // 피사체 입체감 = 중주파 로컬 대비 (v2.3)
+uniform float uSubSkinProtect; // 피부 색역 보호 가중치 (v2.3)
 uniform float uBkgExposure;   // 배경
 uniform float uBkgSaturation;
 uniform float uBkgWarmth;
 uniform float uBkgClarity;
 uniform float uBkgSoft;
+uniform float uBkgHighlights; // 배경 밝은 영역 억제 (v2.3)
 uniform float uSkyExposure;   // 하늘
 uniform float uSkySaturation;
 uniform float uSkyWarmth;
 uniform float uSkyBlue;
+uniform float uSkyDetail;     // 하늘 디테일 (v2.3)
+
+// ───── 국소 톤 커브: 휘도 대역별 가중치 (v2.3) ────────────────────
+uniform float uToneShadow;
+uniform float uToneMid;
+uniform float uToneHigh;
 
 // ───── 8색 HSL: vec3(색조, 채도, 밝기) × 8 대역 ─────────────────
 uniform float uHslActive;     // 0 = 8색 손대지 않음
@@ -193,6 +203,15 @@ float hueDelta(float a, float b) {
     return d;
 }
 
+// ── 피부 색역: 피부톤 정리와 피부톤 보호가 같은 창을 쓴다 ──────────
+float skinWeight(vec3 col) {
+    vec3 hsv = rgb2hsv(clamp(col, 0.0, 1.0));
+    float hueDeg = hsv.x * 360.0;
+    float w = smoothstep(8.0, 22.0, hueDeg) * (1.0 - smoothstep(42.0, 62.0, hueDeg));
+    w *= smoothstep(0.06, 0.16, hsv.y) * (1.0 - smoothstep(0.55, 0.85, hsv.y));
+    return clamp(w, 0.0, 1.0);
+}
+
 // 코사인 창: 대역 중심에서 1, 이웃 중심에서 0. 이웃끼리 보완이라 경계가 끊기지 않는다.
 float bandWeight(float hueDeg, float center, float prevGap, float nextGap) {
     float d = hueDelta(center / 360.0, hueDeg / 360.0) * 360.0;
@@ -284,6 +303,19 @@ void main() {
     c += uBlacks * 0.20 * (1.0 - smoothstep(0.0, 0.38, l));
     c = mix(c, c * 0.80 + 0.10, uFade);
 
+    // ── 2-1. 국소 톤 커브 ───────────────────────────────────────────
+    //   전역 노출·대비와 달리, 휘도 대역마다 따로 민다. 같은 값이라도 이미 밝은 곳과
+    //   어두운 곳이 다르게 움직이므로 하얗게 날아간 하늘 없이 중간톤만 올릴 수 있다.
+    if (abs(uToneShadow) + abs(uToneMid) + abs(uToneHigh) > 0.001) {
+        float tl = luma(c);
+        float wShadow = 1.0 - smoothstep(0.0, 0.58, tl);
+        float wMid = smoothstep(0.12, 0.50, tl) * (1.0 - smoothstep(0.50, 0.88, tl));
+        float wHigh = smoothstep(0.52, 1.0, tl);
+        float curve = uToneShadow * wShadow + uToneMid * wMid + uToneHigh * wHigh;
+        // 밝은 픽셀은 덜 움직여 하이라이트가 더 날아가지 않게 한다.
+        c *= 1.0 + curve * 0.28 * (1.0 - 0.45 * tl);
+    }
+
     // ── 3. 색온도·틴트 ────────────────────────────────────────────────
     c.r *= 1.0 + uTemperature * 0.20;
     c.b *= 1.0 - uTemperature * 0.20;
@@ -329,10 +361,7 @@ void main() {
 
     // ── 8. 피부톤 정리 ────────────────────────────────────────────────
     if (uSkin > 0.001) {
-        vec3 skinHsv = rgb2hsv(clamp(c, 0.0, 1.0));
-        float hueDeg = skinHsv.x * 360.0;
-        float skinMask = smoothstep(8.0, 22.0, hueDeg) * (1.0 - smoothstep(42.0, 62.0, hueDeg));
-        skinMask *= smoothstep(0.06, 0.16, skinHsv.y) * (1.0 - smoothstep(0.55, 0.85, skinHsv.y));
+        float skinMask = skinWeight(c);
         vec3 fineBlur = blur(uv, 1.6);
         c -= (original - fineBlur) * 0.55 * uSkin * skinMask;
         c = mix(c, vec3(luma(c)), 0.06 * uSkin * skinMask);
@@ -417,26 +446,55 @@ void main() {
     }
 
     // ── 14. 영역별 보정 (피사체 · 배경 · 하늘) ─────────────────────────
+    //   v2.3: 경계 후광을 막기 위해 마스크를 이웃 4탭으로 한 번 더 부드럽게(가이드 블렌딩) 하고,
+    //   마스크 기울기가 큰 경계에서는 보정 강도를 줄인다. 별도 패스 없이 같은 셰이더 안에서
+    //   해결하므로 프리뷰와 원본 해상도 저장이 언제나 같은 결과를 낸다.
     if (uMaskOn > 0.5) {
-        vec3 maskSample = texture(uMask, uv).rgb;
-        float mSub = clamp(maskSample.r, 0.0, 1.0);
-        float mSky = clamp(maskSample.g, 0.0, 1.0) * (1.0 - mSub);
-        float mBkg = clamp(1.0 - mSub - mSky, 0.0, 1.0);
+        vec2 mo = uTexel * 1.5;
+        vec2 m0 = texture(uMask, uv).rg;
+        vec2 mN = texture(uMask, clamp(uv + vec2(0.0, mo.y), vec2(0.0), vec2(1.0))).rg;
+        vec2 mS = texture(uMask, clamp(uv - vec2(0.0, mo.y), vec2(0.0), vec2(1.0))).rg;
+        vec2 mE = texture(uMask, clamp(uv + vec2(mo.x, 0.0), vec2(0.0), vec2(1.0))).rg;
+        vec2 mW = texture(uMask, clamp(uv - vec2(mo.x, 0.0), vec2(0.0), vec2(1.0))).rg;
+        vec2 soft = mix(m0, (m0 + mN + mS + mE + mW) * 0.2, 0.65);
+        float spread = abs(mN.x - mS.x) + abs(mE.x - mW.x) + abs(mN.y - mS.y) + abs(mE.y - mW.y);
+        float edge = clamp(spread * 2.2, 0.0, 1.0);
+        float edgeDamp = 1.0 - edge * 0.70;
 
-        float ev = uSubExposure * mSub + uBkgExposure * mBkg + uSkyExposure * mSky;
+        float sSub = clamp(soft.x, 0.0, 1.0);
+        float sSky = clamp(soft.y, 0.0, 1.0);
+        float mSub = sSub * edgeDamp;
+        float mSky = sSky * (1.0 - sSub) * edgeDamp;
+        float mBkg = clamp(1.0 - sSub - sSky, 0.0, 1.0) * edgeDamp;
+
+        // 피부톤 보호: 피부로 읽히는 픽셀은 피사체 보정에서 덜 움직인다.
+        float skinHold = skinWeight(c) * uSubSkinProtect;
+        float subW = mSub * (1.0 - skinHold * 0.80);
+
+        float ev = uSubExposure * subW + uBkgExposure * mBkg + uSkyExposure * mSky;
         if (abs(ev) > 0.001) {
             c = linearToSrgb(srgbToLinear(clamp(c, 0.0, 1.0)) * exp2(ev * 0.9));
         }
-        float warm = uSubWarmth * mSub + uBkgWarmth * mBkg + uSkyWarmth * mSky;
+        float warm = uSubWarmth * subW + uBkgWarmth * mBkg + uSkyWarmth * mSky;
         if (abs(warm) > 0.001) {
             c.r *= 1.0 + warm * 0.20;
             c.b *= 1.0 - warm * 0.20;
         }
-        float satAmt = uSubSaturation * mSub + uBkgSaturation * mBkg + uSkySaturation * mSky;
+        float satAmt = uSubSaturation * subW + uBkgSaturation * mBkg + uSkySaturation * mSky;
         if (abs(satAmt) > 0.001) {
             c = mix(vec3(luma(c)), c, 1.0 + satAmt);
         }
-        float clarity = uSubClarity * mSub + uBkgClarity * mBkg;
+        if (abs(uSubContrast) > 0.001 && mSub > 0.001) {
+            // 피사체만 0.5 기준으로 대비를 넓힌다 — 배경은 그대로 두고 인물이 떠 보이게.
+            vec3 cc = (c - 0.5) * (1.0 + uSubContrast * 0.55) + 0.5;
+            c = mix(c, cc, subW);
+        }
+        if (abs(uSubStructure) > 0.001 && mSub > 0.001) {
+            // 입체감 = 중주파 로컬 대비. 피부에서는 조금 덜 움직여 모공이 도드라지지 않게.
+            c += (original - mid) * uSubStructure * 0.65 * subW;
+            c += (original - wide) * uSubStructure * 0.25 * subW;
+        }
+        float clarity = uSubClarity * subW + uBkgClarity * mBkg;
         if (abs(clarity) > 0.001) {
             c += (original - mid) * clarity * 0.85;
             c += (original - fine) * max(clarity, 0.0) * 0.45;
@@ -445,12 +503,32 @@ void main() {
             // 배경 디테일을 덜어 내 초점이 피사체에 남게 한다.
             c -= (original - wide) * uBkgSoft * 1.35 * mBkg;
         }
+        if (abs(uBkgHighlights) > 0.001 && mBkg > 0.001) {
+            // 배경의 밝은 영역이 시선을 뺏지 않게: 하이라이트만 눌러 준다(반대 방향은 살짝 올림).
+            float bl = luma(c);
+            float bright = smoothstep(0.58, 1.0, bl) * mBkg;
+            if (uBkgHighlights > 0.0) {
+                c -= vec3(uBkgHighlights * 0.42 * bright * bl);
+            } else {
+                c += (vec3(1.0) - c) * (-uBkgHighlights) * 0.22 * bright;
+            }
+        }
+        if (abs(uSkyDetail) > 0.001 && mSky > 0.001) {
+            c += (original - mid) * uSkyDetail * 0.85 * mSky;
+            c += (original - wide) * uSkyDetail * 0.30 * mSky;
+        }
         if (abs(uSkyBlue) > 0.001) {
             vec3 hsvSky = rgb2hsv(clamp(c, 0.0, 1.0));
             float pull = clamp(uSkyBlue, 0.0, 1.0) * 0.75;
             hsvSky.x = fract(hsvSky.x + hueDelta(hsvSky.x, 0.595) * pull);
             hsvSky.y = clamp(hsvSky.y * (1.0 + max(uSkyBlue, 0.0) * 0.45), 0.0, 1.0);
             c = mix(c, hsv2rgb(hsvSky), mSky);
+        }
+        if (uSubSkinProtect > 0.001 && mSub > 0.001 && skinHold > 0.001) {
+            // 채도 폭주 방지: 피부는 자연스러운 채도 대역 안으로만 남긴다.
+            vec3 hslS = rgb2hsl(clamp(c, 0.0, 1.0));
+            hslS.y = mix(hslS.y, clamp(hslS.y, 0.14, 0.44), skinHold * 0.55);
+            c = mix(c, hsl2rgb(hslS), skinHold * 0.55);
         }
     }
 

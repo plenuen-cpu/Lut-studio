@@ -21,6 +21,10 @@ import com.plenuen.lumen.llm.LocalLlmEngine
 import com.plenuen.lumen.nima.NimaEvaluator
 import com.plenuen.lumen.nima.NimaOptimizer
 import com.plenuen.lumen.nima.NimaScores
+import com.plenuen.lumen.engine.PhotoDiagnosis
+import com.plenuen.lumen.engine.PhotoDiagnosisEngine
+import com.plenuen.lumen.engine.PixelSample
+import com.plenuen.lumen.engine.RecipeSearch
 import com.plenuen.lumen.nl.AestheticPlanner
 import com.plenuen.lumen.nl.AestheticProfile
 import com.plenuen.lumen.nl.NaturalLanguageParser
@@ -93,6 +97,8 @@ class EditorViewModel(
         val note: Note? = null,
         val chips: List<String> = emptyList(),
         val scene: SceneStats = SceneStats.UNKNOWN,
+        /** v2.3 사진 진단: 노출·클리핑·화이트밸런스·피부톤·피사체 분리·장면 유형. */
+        val diagnosis: PhotoDiagnosis = PhotoDiagnosis.UNKNOWN,
         val straighten: StraightenEstimator.Result? = null,
         val presets: List<LutPreset> = emptyList(),
         val lutBytes: ByteArray? = null,
@@ -189,6 +195,9 @@ class EditorViewModel(
                     },
                 )
             }
+            // 사진 진단은 마스크가 오기 전에도 한 번 재 둔다: 문장 해석과 자동 보정이 바로 쓴다.
+            val earlyDiagnosis = withContext(Dispatchers.Default) { diagnose(loaded.bitmap, null) }
+            _state.update { it.copy(diagnosis = earlyDiagnosis) }
             buildMask(loaded.bitmap)
             scheduleNimaScore(immediate = true)
         }
@@ -200,17 +209,26 @@ class EditorViewModel(
             val mask = withContext(Dispatchers.Default) {
                 runCatching { maskGenerator.generate(bitmap) }.getOrNull()
             }
+            // 마스크가 생기면 인물·배경·하늘을 나눠 다시 진단한다(피부톤·피사체 분리 항목이 켜진다).
+            val diagnosis = withContext(Dispatchers.Default) { diagnose(bitmap, mask?.bitmap) }
             _state.update { state ->
                 if (mask == null) {
-                    state.copy(maskReady = false, maskMethod = "마스크를 만들지 못했어요.")
+                    state.copy(
+                        maskReady = false,
+                        maskMethod = "마스크를 만들지 못했어요.",
+                        diagnosis = diagnosis,
+                    )
                 } else {
                     state.copy(
                         mask = mask.bitmap,
                         maskReady = true,
                         maskMethod = maskGenerator.describe(mask.method),
+                        diagnosis = diagnosis,
                     )
                 }
             }
+            // 영역 마스크가 생겼으니 지금 레시피의 점수도 마스크가 적용된 프레임으로 다시 잰다.
+            scheduleNimaScore(immediate = true)
         }
     }
 
@@ -238,6 +256,7 @@ class EditorViewModel(
                 session = session,
                 scene = _state.value.scene,
                 lutFinder = ::findLut,
+                diagnosis = _state.value.diagnosis,
             )
             // "자동 보정", "NIMA 높여줘", "점수 잘 나오게" — 점수판(NIMA)을 쓴 자동 보정으로 바로 넘긴다.
             if (result.nimaAuto) {
@@ -396,7 +415,7 @@ class EditorViewModel(
         }
 
         val names = lutLibrary?.presets?.map { it.display } ?: emptyList()
-        val decoded = llm.interpret(text, current.scene, names)
+        val decoded = llm.interpret(text, current.scene, names, current.diagnosis)
         _state.update { it.copy(busy = null) }
         if (decoded == null) {
             _state.update {
@@ -463,8 +482,8 @@ class EditorViewModel(
             }
             pushState()
 
-            // 2) NIMA 후보 탐색
-            _state.update { it.copy(busy = "NIMA 점수를 재는 중…") }
+            // 2) 사진 진단 → 다변수 후보 탐색 → 다중 품질 평가 (v2.3)
+            _state.update { it.copy(busy = "사진을 진단하는 중…") }
             val engine = ensureEvaluator(preview, _state.value.lutBytes)
             if (engine == null) {
                 applyRuleBasedAuto()
@@ -472,35 +491,70 @@ class EditorViewModel(
             }
             val base = session.current
             val baseScore = withContext(nimaThread) { engine.score(base) }
-            val result = withContext(nimaThread) {
-                NimaOptimizer.optimize(
-                    base = base,
-                    baseScore = baseScore,
-                    scorer = engine.scorer(),
-                    onProgress = { done, best ->
-                        if (done % 6 == 0) {
-                            _state.update {
-                                it.copy(
-                                    busy = "NIMA 후보 ${done}개 · 지금 최고 ${NimaScores.format(best)}",
-                                )
-                            }
+            val guided = withContext(nimaThread) {
+                val basePixels = engine.renderPixels(base) ?: return@withContext null
+                val channels = maskChannels(_state.value.mask, RecipeSearch.NIMA_SIDE)
+                // PixelSample이 픽셀을 복사해 가진다: renderPixels가 주는 배열은 다음 후보 렌더가
+                // 덮어쓰는 재사용 버퍼라, 기준선은 그대로 두면 마지막 후보가 되어 버린다.
+                val sample = PixelSample(
+                    argb = basePixels,
+                    width = RecipeSearch.NIMA_SIDE,
+                    height = RecipeSearch.NIMA_SIDE,
+                    subject = channels.first,
+                    sky = channels.second,
+                )
+                val diagnosis = PhotoDiagnosisEngine.diagnose(
+                    argb = basePixels,
+                    width = RecipeSearch.NIMA_SIDE,
+                    height = RecipeSearch.NIMA_SIDE,
+                    subjectMask = channels.first,
+                    skyMask = channels.second,
+                )
+                val renderer = RecipeSearch.Renderer(
+                    render = { recipe -> engine.renderPixels(recipe) },
+                    nima = { pixels -> engine.nimaOf(pixels) },
+                    baseSample = sample,
+                    baseNima = baseScore,
+                    onProgress = { done, _ ->
+                        if (done % 4 == 0) {
+                            _state.update { it.copy(busy = "후보 ${done}개 · 품질 평가 중") }
                         }
                     },
                 )
+                NimaOptimizer.enhance(
+                    base = base,
+                    baseNima = baseScore,
+                    diagnosis = diagnosis,
+                    renderer = renderer,
+                ) to diagnosis
             }
+            if (guided == null) {
+                applyRuleBasedAuto()
+                return@safeLaunch
+            }
+            val (result, diagnosis) = guided
+            _state.update { it.copy(diagnosis = diagnosis) }
 
             if (result.improved) {
                 session.replace(result.recipe, "✨ 자동")
                 val gainText = String.format(java.util.Locale.US, "%+.2f", result.gain)
+                val qualityText = if (result.qualityBefore != null && result.qualityAfter != null) {
+                    " 품질 ${String.format(java.util.Locale.US, "%.2f", result.qualityBefore)} → " +
+                        String.format(java.util.Locale.US, "%.2f", result.qualityAfter) + "."
+                } else {
+                    ""
+                }
                 _state.update {
                     it.copy(
                         busy = null,
                         nimaBusy = false,
                         nimaScore = result.after,
                         note = Note(
-                            "NIMA 미적 점수 ${NimaScores.format(result.before)} → " +
-                                "${NimaScores.format(result.after)} ($gainText)로 자동 보정했어요. " +
-                                "${result.summary()}를 조정했어요.",
+                            "${diagnosis.summary()}. " +
+                                "NIMA ${NimaScores.format(result.before)} → " +
+                                "${NimaScores.format(result.after)} ($gainText), " +
+                                "${result.summary()}를 조정했어요.$qualityText" +
+                                if (result.rejected > 0) " (해로운 후보 ${result.rejected}개는 걸러냈어요.)" else "",
                             caption = "✨ 자동 보정",
                         ),
                         message = null,
@@ -514,7 +568,8 @@ class EditorViewModel(
             val measured = result.after ?: result.before
             val message = when {
                 measured == null -> "NIMA 점수를 재지 못했어요. 모델을 준비하지 못했습니다."
-                else -> "지금 사진이 이미 NIMA ${NimaScores.format(measured)}이라 억지로 건드리지 않았어요."
+                else -> "${diagnosis.summary()}. 지금 사진이 이미 NIMA ${NimaScores.format(measured)}이고 " +
+                    "더 나은 후보가 없어 억지로 건드리지 않았어요."
             }
             _state.update {
                 it.copy(
@@ -576,6 +631,10 @@ class EditorViewModel(
             val existing = evaluator
             if (existing != null && existing.ready && evaluatorSource === bitmap) {
                 existing.updateLook(lutBytes)
+                // 마스크는 사진을 연 뒤에 만들어진다. 평가기가 먼저 열렸다면 지금 올려야 영역 보정
+                // 후보가 실제 프리뷰와 같은 프레임(마스크 적용)으로 평가된다.
+                val mask = _state.value.mask
+                if (existing.maskBitmap !== mask) existing.updateMask(mask)
                 return@withContext existing
             }
             runCatching { existing?.close() }
@@ -923,6 +982,48 @@ class EditorViewModel(
         scaled.getPixels(pixels, 0, width, 0, 0, width, height)
         if (scaled !== bitmap) scaled.recycle()
         return SceneAnalyzer.analyze(pixels, width, height)
+    }
+
+    /**
+     * Reads the open photo (and its mask, when there is one) for the diagnosis.
+     *
+     * 640px is enough for every statistic the diagnosis uses and cheap enough to run on the frame
+     * thread while the photo opens.
+     */
+    private fun diagnose(bitmap: Bitmap, mask: Bitmap?): PhotoDiagnosis {
+        val width = minOf(bitmap.width, 640)
+        val height = (bitmap.height.toFloat() * width / bitmap.width).toInt().coerceAtLeast(1)
+        val scaled = Bitmap.createScaledBitmap(bitmap, width, height, true)
+        val pixels = IntArray(width * height)
+        scaled.getPixels(pixels, 0, width, 0, 0, width, height)
+        if (scaled !== bitmap) scaled.recycle()
+        var subject: FloatArray? = null
+        var sky: FloatArray? = null
+        if (mask != null) {
+            val m = Bitmap.createScaledBitmap(mask, width, height, true)
+            val mp = IntArray(width * height)
+            m.getPixels(mp, 0, width, 0, 0, width, height)
+            if (m !== mask) m.recycle()
+            subject = FloatArray(width * height) { ((mp[it] shr 16) and 0xFF) / 255f }
+            sky = FloatArray(width * height) { ((mp[it] shr 8) and 0xFF) / 255f }
+        }
+        return PhotoDiagnosisEngine.diagnose(pixels, width, height, subject, sky)
+    }
+
+    /** The mask bitmap split into its two channels at [size]×[size] (R = subject, G = sky). */
+    private fun maskChannels(mask: Bitmap?, size: Int): Pair<FloatArray?, FloatArray?> {
+        if (mask == null) return null to null
+        val scaled = if (mask.width == size && mask.height == size) {
+            mask
+        } else {
+            Bitmap.createScaledBitmap(mask, size, size, true)
+        }
+        val px = IntArray(size * size)
+        scaled.getPixels(px, 0, size, 0, 0, size, size)
+        if (scaled !== mask) scaled.recycle()
+        val subject = FloatArray(size * size) { ((px[it] shr 16) and 0xFF) / 255f }
+        val sky = FloatArray(size * size) { ((px[it] shr 8) and 0xFF) / 255f }
+        return subject to sky
     }
 
     private fun estimateStraight(bitmap: Bitmap): StraightenEstimator.Result {

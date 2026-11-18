@@ -55,19 +55,59 @@ object NaturalLanguageParser {
             lutQuery != null || control != null || restraints.isNotEmpty() ||
             regionHits.isNotEmpty() || colorHits.isNotEmpty()
 
-        /** 0..1 confidence in the instant interpretation (rules are exact by nature). */
+        /**
+         * 0..1 confidence in the instant interpretation, measured from how much of the sentence the
+         * rules actually consumed.
+         *
+         * v2.2.5 answered a flat 0.95~0.98 for any single hit. That was wrong in the case that
+         * matters: "그거 아시죠, 저녁 골목처럼 차분하게 근데 살짝 고급스럽게" matched one word, reported
+         * near-certainty, and the rest of the sentence was never given to the model. Now the number
+         * follows the coverage of the sentence, is docked for hits that pull the same parameter in
+         * opposite directions, and stays low for a single short match — so a compound or ambiguous
+         * request falls through to the diagnosis-aware planner and the local model instead of being
+         * half-applied.
+         */
         val confidence: Float
-            get() = when {
-                hits.size >= 2 || (hits.size + regionHits.size + colorHits.size) >= 2 -> 0.98f
-                hits.size == 1 && restraints.isNotEmpty() -> 0.97f
-                hits.size == 1 || regionHits.isNotEmpty() || colorHits.isNotEmpty() -> 0.95f
-                nimaAuto -> 0.95f
-                restraints.isNotEmpty() -> 0.9f
-                autoStraighten || straightenDeg != null -> 0.9f
-                lutQuery != null -> 0.85f
-                control != null -> 0.9f
-                else -> 0f
+            get() {
+                if (!matched) return 0f
+                val total = meaningful(normalized)
+                val left = meaningful(unmatched)
+                val coverage = if (total <= 0) 0.5f else ((total - left).toFloat() / total).coerceIn(0f, 1f)
+                var score = 0.52f + 0.43f * coverage
+                // 읽지 못한 말이 남아 있으면 그 길이만큼 확신을 더 깎는다(짧은 꼬리와 긴 꼬리를 구분).
+                score -= minOf(0.14f, left * 0.015f)
+                if (conflictingDirections()) score -= 0.14f
+                if (hits.size == 1 && regionHits.isEmpty() && colorHits.isEmpty() && restraints.isEmpty()) {
+                    score -= 0.05f
+                }
+                if (control != null || nimaAuto) score = maxOf(score, 0.90f)
+                if (autoStraighten || straightenDeg != null) score = maxOf(score, 0.85f)
+                if (lutQuery != null) score = maxOf(score, 0.80f)
+                return score.coerceIn(0.30f, 0.98f)
             }
+
+        /** True when the rules read enough of the sentence to act on it without the model. */
+        val wellUnderstood: Boolean get() = confidence >= 0.75f
+
+        private fun meaningful(text: String): Int =
+            text.count { it.isLetterOrDigit() }
+
+        /** 같은 파라미터를 서로 반대 방향으로 미는 의도가 섞여 있는지("더 밝게, 근데 어둡지 않게"). */
+        private fun conflictingDirections(): Boolean {
+            val signs = HashMap<Param, Int>()
+            val all = hits.flatMap { it.intent.delta.ops } +
+                regionHits.flatMap { it.delta.ops } +
+                colorHits.flatMap { it.delta.ops }
+            all.forEach { op ->
+                val amount = when (op) {
+                    is com.plenuen.lumen.core.RecipeDelta.Op.Add -> op.amount
+                    is com.plenuen.lumen.core.RecipeDelta.Op.Set -> 0f
+                }
+                if (amount > 0.005f) signs[op.param] = (signs[op.param] ?: 0) or 1
+                if (amount < -0.005f) signs[op.param] = (signs[op.param] ?: 0) or 2
+            }
+            return signs.values.any { it == 3 }
+        }
 
         /** Absolute ceilings the sentence put on the look ("너무 화려하지는 않게"). */
         val caps: Map<Param, Float>
