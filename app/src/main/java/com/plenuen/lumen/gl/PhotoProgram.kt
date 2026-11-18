@@ -126,6 +126,9 @@ class PhotoProgram {
         GLES30.glUniform1f(loc("uWhites"), recipe[Param.WHITES])
         GLES30.glUniform1f(loc("uBlacks"), recipe[Param.BLACKS])
         GLES30.glUniform1f(loc("uFade"), recipe[Param.FADE])
+        GLES30.glUniform1f(loc("uToneShadow"), recipe[Param.TONE_SHADOW_CURVE])
+        GLES30.glUniform1f(loc("uToneMid"), recipe[Param.TONE_MID_CURVE])
+        GLES30.glUniform1f(loc("uToneHigh"), recipe[Param.TONE_HIGH_CURVE])
 
         GLES30.glUniform1f(loc("uTemperature"), recipe[Param.TEMPERATURE])
         GLES30.glUniform1f(loc("uTint"), recipe[Param.TINT])
@@ -166,15 +169,20 @@ class PhotoProgram {
         GLES30.glUniform1f(loc("uSubSaturation"), recipe[Param.SUBJECT_SATURATION])
         GLES30.glUniform1f(loc("uSubWarmth"), recipe[Param.SUBJECT_WARMTH])
         GLES30.glUniform1f(loc("uSubClarity"), recipe[Param.SUBJECT_CLARITY])
+        GLES30.glUniform1f(loc("uSubContrast"), recipe[Param.SUBJECT_CONTRAST])
+        GLES30.glUniform1f(loc("uSubStructure"), recipe[Param.SUBJECT_STRUCTURE])
+        GLES30.glUniform1f(loc("uSubSkinProtect"), recipe[Param.SUBJECT_SKIN_PROTECT])
         GLES30.glUniform1f(loc("uBkgExposure"), recipe[Param.BACKGROUND_EXPOSURE])
         GLES30.glUniform1f(loc("uBkgSaturation"), recipe[Param.BACKGROUND_SATURATION])
         GLES30.glUniform1f(loc("uBkgWarmth"), recipe[Param.BACKGROUND_WARMTH])
         GLES30.glUniform1f(loc("uBkgClarity"), recipe[Param.BACKGROUND_CLARITY])
         GLES30.glUniform1f(loc("uBkgSoft"), recipe[Param.BACKGROUND_SOFT])
+        GLES30.glUniform1f(loc("uBkgHighlights"), recipe[Param.BACKGROUND_HIGHLIGHTS])
         GLES30.glUniform1f(loc("uSkyExposure"), recipe[Param.SKY_EXPOSURE])
         GLES30.glUniform1f(loc("uSkySaturation"), recipe[Param.SKY_SATURATION])
         GLES30.glUniform1f(loc("uSkyWarmth"), recipe[Param.SKY_WARMTH])
         GLES30.glUniform1f(loc("uSkyBlue"), recipe[Param.SKY_BLUE])
+        GLES30.glUniform1f(loc("uSkyDetail"), recipe[Param.SKY_DETAIL])
 
         // ── 8색 HSL: vec3(색조, 채도, 밝기) × 8 ──────────────────
         val bands = FloatArray(HslBand.entries.size * 3)
@@ -205,14 +213,17 @@ class PhotoProgram {
         val UNIFORM_NAMES = listOf(
             "uSrc", "uLut", "uTexel", "uAspect", "uStraighten", "uCropScale", "uVerticalTilt",
             "uExposure", "uContrast", "uHighlights", "uShadows", "uWhites", "uBlacks", "uFade",
+            "uToneShadow", "uToneMid", "uToneHigh",
             "uTemperature", "uTint", "uVibrance", "uSaturation", "uHarmony", "uCross",
             "uSplitTone", "uSplitBalance", "uShadowHue", "uHighlightHue", "uSkin", "uMono",
             "uClarity", "uTextureAmt", "uDehaze", "uSharpnessAmt", "uGlow", "uHalation",
             "uGrain", "uVignette", "uFocus", "uLutIntensity", "uLutEnabled", "uCompare",
             "uSplitEnabled", "uSplitX", "uMask", "uMaskOn", "uMaskPreview",
             "uSubExposure", "uSubSaturation", "uSubWarmth", "uSubClarity",
+            "uSubContrast", "uSubStructure", "uSubSkinProtect",
             "uBkgExposure", "uBkgSaturation", "uBkgWarmth", "uBkgClarity", "uBkgSoft",
-            "uSkyExposure", "uSkySaturation", "uSkyWarmth", "uSkyBlue",
+            "uBkgHighlights",
+            "uSkyExposure", "uSkySaturation", "uSkyWarmth", "uSkyBlue", "uSkyDetail",
             "uHslActive", "uBandHSL[0]",
         )
 

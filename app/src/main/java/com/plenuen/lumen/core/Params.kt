@@ -51,6 +51,12 @@ enum class Param(
     BLACKS("blacks", "블랙", ParamGroup.TONE, -1f, 1f, 0f, "", 0.01f, true),
     FADE("fade", "페이드", ParamGroup.TONE, 0f, 1f, 0f, "", 0.01f),
 
+    // 국소 톤 커브: 휘도 대역(섀도우·미드톤·하이라이트)별 가중치로만 밝기를 민다.
+    // 기본 톤(노출·대비)이 전역인 반면, 이쪽은 이미 밝은 곳/중간/어두운 곳을 따로 만진다.
+    TONE_SHADOW_CURVE("toneShadowCurve", "섀도우 톤 곡선", ParamGroup.TONE, -1f, 1f, 0f, "", 0.01f, true),
+    TONE_MID_CURVE("toneMidCurve", "미드톤 톤 곡선", ParamGroup.TONE, -1f, 1f, 0f, "", 0.01f, true),
+    TONE_HIGH_CURVE("toneHighCurve", "하이라이트 톤 곡선", ParamGroup.TONE, -1f, 1f, 0f, "", 0.01f, true),
+
     // ---- 색감 ----
     TEMPERATURE("temperature", "색온도", ParamGroup.COLOR, -1f, 1f, 0f, "", 0.01f, true),
     TINT("tint", "틴트", ParamGroup.COLOR, -1f, 1f, 0f, "", 0.01f, true),
@@ -84,15 +90,20 @@ enum class Param(
     SUBJECT_SATURATION("subjectSaturation", "피사체 채도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
     SUBJECT_WARMTH("subjectWarmth", "피사체 색온도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
     SUBJECT_CLARITY("subjectClarity", "피사체 선명도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    SUBJECT_CONTRAST("subjectContrast", "피사체 대비", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    SUBJECT_STRUCTURE("subjectStructure", "피사체 입체감", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    SUBJECT_SKIN_PROTECT("subjectSkinProtect", "피부톤 보호", ParamGroup.REGION, 0f, 1f, 0f, "", 0.01f),
     BACKGROUND_EXPOSURE("backgroundExposure", "배경 밝기", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
     BACKGROUND_SATURATION("backgroundSaturation", "배경 채도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
     BACKGROUND_WARMTH("backgroundWarmth", "배경 색온도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
     BACKGROUND_CLARITY("backgroundClarity", "배경 선명도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    BACKGROUND_HIGHLIGHTS("backgroundHighlights", "배경 하이라이트", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
     BACKGROUND_SOFT("backgroundSoft", "배경 흐림", ParamGroup.REGION, 0f, 1f, 0f, "", 0.01f),
     SKY_EXPOSURE("skyExposure", "하늘 밝기", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
     SKY_SATURATION("skySaturation", "하늘 채도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
     SKY_WARMTH("skyWarmth", "하늘 색온도", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
     SKY_BLUE("skyBlue", "하늘 파랑", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
+    SKY_DETAIL("skyDetail", "하늘 디테일", ParamGroup.REGION, -1f, 1f, 0f, "", 0.01f, true),
 
     // ---- 8색 HSL: 색 대역마다 색조·채도·밝기를 따로 ----
     RED_HUE("redHue", "빨강 색조", ParamGroup.HSL, -1f, 1f, 0f, "", 0.01f, true),

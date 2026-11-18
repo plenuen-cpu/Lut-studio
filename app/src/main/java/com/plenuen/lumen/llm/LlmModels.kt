@@ -83,15 +83,23 @@ object LlmScale {
         P.SUBJECT_SATURATION to 0.50f,
         P.SUBJECT_WARMTH to 0.50f,
         P.SUBJECT_CLARITY to 0.50f,
+        P.SUBJECT_CONTRAST to 0.50f,
+        P.SUBJECT_STRUCTURE to 0.50f,
+        P.SUBJECT_SKIN_PROTECT to 0.60f,
         P.BACKGROUND_EXPOSURE to 0.60f,
         P.BACKGROUND_SATURATION to 0.50f,
         P.BACKGROUND_WARMTH to 0.50f,
         P.BACKGROUND_CLARITY to 0.50f,
+        P.BACKGROUND_HIGHLIGHTS to 0.50f,
         P.BACKGROUND_SOFT to 0.70f,
         P.SKY_EXPOSURE to 0.50f,
         P.SKY_SATURATION to 0.50f,
         P.SKY_WARMTH to 0.40f,
         P.SKY_BLUE to 0.60f,
+        P.SKY_DETAIL to 0.50f,
+
+        // 국소 톤 커브(톤 곡선 3종)는 모델에게 열지 않는다: 엔진의 장면 전략이 쓰는 값이고,
+        // 프롬프트 키 목록이 예산(LlmBudget.PROMPT_BUDGET)을 넘지 않게 하려는 이유도 있다.
     ) + HslBand.entries.flatMap { it.params }.associateWith { 0.50f }
 
     /** Params the model may move; geometry and LUT selection stay under explicit control. */

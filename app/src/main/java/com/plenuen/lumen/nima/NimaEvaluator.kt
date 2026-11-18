@@ -75,10 +75,25 @@ class NimaEvaluator(private val context: Context) : Closeable {
 
     /** NIMA 미적 점수(1~10). 준비가 안 됐거나 추론이 실패하면 null. */
     fun score(recipe: com.plenuen.lumen.core.EditRecipe): Float? {
+        val pixels = renderPixels(recipe) ?: return null
+        return nimaOf(pixels)
+    }
+
+    /**
+     * Renders [recipe] at 224×224 through the preview's own shader and returns the pixels.
+     *
+     * v2.3 needs the pixels as well as the score: the quality evaluator measures clipping, colour,
+     * skin and subject separation on exactly the frame the model judged.
+     */
+    fun renderPixels(recipe: com.plenuen.lumen.core.EditRecipe): IntArray? {
         val renderSession = session ?: return null
+        if (source == null) return null
+        return renderSession.render(recipe, lutBytes, sourceWidth, sourceHeight)
+    }
+
+    /** Scores an already rendered 224×224 frame. */
+    fun nimaOf(pixels: IntArray): Float? {
         val model = interpreter ?: return null
-        val bitmapSource = source ?: return null
-        val pixels = renderSession.render(recipe, lutBytes, sourceWidth, sourceHeight) ?: return null
         val input = NimaScores.toInput(pixels, NimaScores.INPUT_SIZE, NimaScores.INPUT_SIZE)
         return model.score(input)
     }

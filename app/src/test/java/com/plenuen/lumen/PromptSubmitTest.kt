@@ -48,7 +48,7 @@ class PromptSubmitTest {
         chips: List<String> = emptyList(),
         scene: com.plenuen.lumen.nl.SceneStats = com.plenuen.lumen.nl.SceneStats.UNKNOWN,
     ): Run {
-        val result = PromptEngine.apply(text, session, scene) { null }
+        val result = PromptEngine.apply(text, session, scene, lutFinder = { null })
         val note = when (result.noteAction) {
             PromptEngine.NoteAction.CLEAR -> null
             PromptEngine.NoteAction.REPLACE -> result.noteText

@@ -6,6 +6,8 @@ import com.plenuen.lumen.core.Param
 import com.plenuen.lumen.core.RecipeDelta
 import com.plenuen.lumen.core.RecipeSession
 import com.plenuen.lumen.data.LutPreset
+import com.plenuen.lumen.engine.PhotoDiagnosis
+import com.plenuen.lumen.engine.ScenePlanner
 
 /**
  * Everything a typed sentence does to a [RecipeSession], with no Android and no UI in the way.
@@ -58,6 +60,8 @@ object PromptEngine {
         val message: String? = null,
         /** Normalised sentence, for logs. */
         val normalized: String = "",
+        /** How much of the sentence the rules actually read (0..1). */
+        val confidence: Float = 0f,
     )
 
     /**
@@ -71,6 +75,7 @@ object PromptEngine {
         session: RecipeSession,
         scene: SceneStats = SceneStats.UNKNOWN,
         lutFinder: (String) -> LutPreset? = { null },
+        diagnosis: PhotoDiagnosis = PhotoDiagnosis.UNKNOWN,
     ): Result {
         val before = session.current
         val parsed = NaturalLanguageParser.parse(text)
@@ -141,8 +146,9 @@ object PromptEngine {
         // 3) 룩 의도
         for (hit in parsed.hits) {
             val delta = hit.intent.aesthetic?.let { profile ->
-                AestheticPlanner.plan(profile, scene)
-            } ?: hit.intent.delta
+                // 같은 "고급스럽게"라도 인물·풍경·야경에서 다른 양이 나온다.
+                ScenePlanner.plan(profile, diagnosis, scene)
+            } ?: ScenePlanner.adjust(hit.intent.delta, diagnosis)
             val strength = parsed.strengthOf(hit)
             if (!delta.isEmpty && strength != 0f) {
                 session.apply(hit.intent.label, delta, strength)
@@ -200,6 +206,7 @@ object PromptEngine {
                 autoStraightenRequested = parsed.autoStraighten,
                 before = before,
                 normalized = parsed.normalized,
+                confidence = parsed.confidence,
             )
         }
 
@@ -229,7 +236,8 @@ object PromptEngine {
             noteText = noteText,
             noteCaption = if (isReset) "초기화" else "방금 한 보정",
             lutPreset = lutPreset,
-            leftoverForLlm = worthAsking(parsed.unmatched),
+            leftoverForLlm = worthAsking(parsed.unmatched, parsed.confidence),
+            confidence = parsed.confidence,
             autoStraightenRequested = parsed.autoStraighten,
             compareRequested = compareRequested,
             wantsRegionMask = parsed.regionHits.isNotEmpty(),
@@ -316,9 +324,11 @@ object PromptEngine {
      * 한 낱말짜리 꼬리("피부", "하늘")는 이미 읽은 문장의 일부다. 두 낱말 이상이거나 세 글자
      * 이상 남았을 때만 모델에게 물어, 알아들은 문장을 다시 해석하게 만들지 않는다.
      */
-    fun worthAsking(leftover: String): String? {
+    fun worthAsking(leftover: String, confidence: Float = 1f): String? {
         val text = leftover.trim()
         if (text.isEmpty()) return null
-        return if (text.split(' ').size >= 2 || text.length >= 3) text else null
+        // 규칙이 문장을 다 읽지 못했으면(확신 낮음) 짧은 자투리도 모델에게 물어본다.
+        val unsure = confidence < 0.70f && text.length >= 2
+        return if (unsure || text.split(' ').size >= 2 || text.length >= 3) text else null
     }
 }

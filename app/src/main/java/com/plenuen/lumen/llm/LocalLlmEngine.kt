@@ -118,6 +118,7 @@ class LocalLlmEngine(private val context: Context) {
         request: String,
         stats: SceneStats,
         lutNames: List<String>,
+        diagnosis: com.plenuen.lumen.engine.PhotoDiagnosis? = null,
     ): LlmRecipeDecoder.Decoded? = withContext(Dispatchers.Default) {
         val engine = inference ?: return@withContext null
         // MediaPipe .task 번들이 Qwen 채팅 템플릿을 직접 입힌다. 여기서 <|im_start|>를 또 넣으면
@@ -125,7 +126,7 @@ class LocalLlmEngine(private val context: Context) {
         // 말버릇("그거 아시죠", "뭔가", "약간 그런")은 작은 모델을 흔들기만 하므로 먼저 덜어 낸다.
         val text = NaturalLanguageParser.salient(request).take(LlmRecipeDecoder.MAX_REQUEST_CHARS)
 
-        var prompt = LlmRecipeDecoder.buildPrompt(text, lutNames, sceneHint(stats))
+        var prompt = LlmRecipeDecoder.buildPrompt(text, lutNames, sceneHint(stats, diagnosis))
         var tokens = countTokens(engine, prompt)
         if (!LlmBudget.fits(tokens)) {
             // 예시·사진 상태를 덜어 낸 짧은 프롬프트로 한 번 더. 그래도 넘으면 호출하지 않는다.
@@ -170,8 +171,23 @@ class LocalLlmEngine(private val context: Context) {
         return if (measured > 0) measured else LlmBudget.estimate(prompt)
     }
 
-    /** One line of measured photo state, folded into the prompt before the request. */
-    private fun sceneHint(stats: SceneStats): String {
+    /**
+     * One line of measured photo state, folded into the prompt before the request.
+     *
+     * From v2.3 this carries the diagnosis (scene kind, clipping, cast, skin, separation), which is
+     * what lets the same word be answered differently on a portrait and on a night street.
+     */
+    private fun sceneHint(stats: SceneStats, diagnosis: com.plenuen.lumen.engine.PhotoDiagnosis? = null): String {
+        val measured = diagnosis?.takeIf { it.measured }?.promptHint().orEmpty()
+        if (measured.isNotEmpty()) {
+            val extra = when {
+                stats.samples == 0 -> ""
+                stats.isDark -> " 밝기 어둡다."
+                stats.isBright -> " 밝기 밝다."
+                else -> " 밝기 보통."
+            }
+            return measured + extra
+        }
         if (stats.samples == 0) return ""
         val luma = when {
             stats.isDark -> "어둡다"
